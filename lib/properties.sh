@@ -17,27 +17,58 @@ trim() {
   printf '%s' "$s"
 }
 
+## Resolve a placeholder name to a value.
+## Precedence:
+## 1) Environment variables (even if empty)
+## 2) Properties map
+## 3) Empty string
+## Usage: resolved="$(resolve_var "VAR_NAME")"
+resolve_var() {
+  local name="$1"
+  if [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    # If the env var is set (even to empty), it wins.
+    if [[ ${!name+x} ]]; then
+      printf '%s' "${!name}"
+      return
+    fi
+  fi
+  printf '%s' "${PROPS[$name]:-}"
+}
+
 ## Load key/value pairs from a .properties file into PROPS.
 ## Lines starting with '#' are ignored. Keys and values are trimmed.
 ## Usage: load_properties path/to/env.properties
 load_properties() {
   local file="$1"
+  local line key value
 
   if [[ ! -f "$file" ]]; then
     echo "Properties file not found: $file" >&2
     return 1
   fi
 
-  while IFS='=' read -r key value || [[ -n "$key" ]]; do
-    key="$(trim "$key")"
-    value="$(trim "$value")"
-
-    # Skip blanks and comments
+  # Use awk for parsing to keep the Bash loop clean and predictable.
+  # Scope: key=value only, trim spaces, ignore blank lines and #/; comments.
+  while IFS=$'\t' read -r key value || [[ -n "$key" ]]; do
     [[ -z "$key" ]] && continue
-    [[ "$key" == \#* ]] && continue
-
     PROPS["$key"]="$value"
-  done < "$file"
+  done < <(
+    awk -F'=' '
+      {
+        sub(/\r$/, "", $0)
+        line=$0
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+        if (line == "" || line ~ /^#/ || line ~ /^;/) next
+        key=$1
+        $1=""
+        sub(/^=/, "", $0)
+        val=$0
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+        if (key != "") print key "\t" val
+      }
+    ' "$file"
+  )
 }
 
 ## Read a property value by key.
@@ -68,18 +99,12 @@ expand_value() {
   local var_name var_token var_value
   local i
 
+  # Replace one token per pass to allow nested expansions.
   for i in {1..10}; do
     if [[ "$value" =~ (\$\{[A-Za-z_][A-Za-z0-9_\\.]*\}) ]]; then
       var_token="${BASH_REMATCH[1]}"
       var_name="${var_token:2:${#var_token}-3}"
-      if [[ "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-        var_value="${!var_name:-}"
-      else
-        var_value=""
-      fi
-      if [[ -z "$var_value" ]]; then
-        var_value="${PROPS[$var_name]:-}"
-      fi
+      var_value="$(resolve_var "$var_name")"
       value="${value//$var_token/$var_value}"
     else
       break

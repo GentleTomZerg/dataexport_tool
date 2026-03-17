@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This script requires bash. Run: bash data_export.sh ..." >&2
+  exit 1
+fi
 set -euo pipefail
 shopt -s extglob
 
@@ -14,7 +18,7 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  ./data_export.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b]
+  ./data_export.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD]
 
 Environment:
   DB_PASSWORD_KEY  Passphrase used by openssl for decrypt.
@@ -25,6 +29,7 @@ main() {
   local db_props="env.properties"
   local data_props="data_export.properties"
   local jobs_arg=""
+  local run_date=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +53,10 @@ main() {
         jobs_arg="$2"
         shift 2
         ;;
+      --date)
+        run_date="$2"
+        shift 2
+        ;;
       -h|--help)
         usage
         return 0
@@ -59,6 +68,16 @@ main() {
         ;;
     esac
   done
+
+  if [[ -z "$run_date" ]]; then
+    run_date="$(date +%F)"
+  fi
+  export EXPORT_DATE="$run_date"
+  export TODAY="$EXPORT_DATE"
+  export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"
+  export EXPORT_MONTH="$(date -d "$EXPORT_DATE" +%Y-%m)"
+  export MONTH_START="$(date -d "$EXPORT_DATE" +%Y-%m-01)"
+  export MONTH_END="$(date -d "$EXPORT_DATE +1 month -1 day" +%F)"
 
   # Load DB config
   load_properties "$db_props"

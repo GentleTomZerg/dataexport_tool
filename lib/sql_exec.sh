@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This library requires bash." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -euo pipefail
 
 ## Execute SQL and export results to file using the selected DB_TYPE.

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This script requires bash. Run: bash export_example.sh" >&2
+  exit 1
+fi
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,6 +16,13 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 
 DB_PROPS="$ROOT_DIR/env.properties"
 DATA_PROPS="$ROOT_DIR/data_export.properties"
+
+export EXPORT_DATE="$(date +%F)"
+export TODAY="$EXPORT_DATE"
+export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"
+export EXPORT_MONTH="$(date -d "$EXPORT_DATE" +%Y-%m)"
+export MONTH_START="$(date -d "$EXPORT_DATE" +%Y-%m-01)"
+export MONTH_END="$(date -d "$EXPORT_DATE +1 month -1 day" +%F)"
 
 load_properties "$DB_PROPS"
 DB_PROFILE="primary"

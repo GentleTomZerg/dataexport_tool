@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This library requires bash." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -euo pipefail
 
 ## Decrypt password file using openssl and DB_PASSWORD_KEY.

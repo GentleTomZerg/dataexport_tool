@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This library requires bash." >&2
+  return 1 2>/dev/null || exit 1
+fi
 set -euo pipefail
 shopt -s extglob
 
@@ -40,7 +44,8 @@ load_properties() {
 ## Usage: value="$(get_prop "some.key")"
 get_prop() {
   local key="$1"
-  printf '%s' "${PROPS[$key]:-}"
+  local raw="${PROPS[$key]:-}"
+  printf '%s' "$(expand_value "$raw")"
 }
 
 ## List property keys by prefix.
@@ -54,4 +59,32 @@ list_props_by_prefix() {
       printf '%s\n' "$key"
     fi
   done
+}
+
+## Expand ${VAR} placeholders using current environment variables.
+## Usage: expanded="$(expand_value "path/${EXPORT_DATE}")"
+expand_value() {
+  local value="$1"
+  local var_name var_token var_value
+  local i
+
+  for i in {1..10}; do
+    if [[ "$value" =~ (\$\{[A-Za-z_][A-Za-z0-9_\\.]*\}) ]]; then
+      var_token="${BASH_REMATCH[1]}"
+      var_name="${var_token:2:${#var_token}-3}"
+      if [[ "$var_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        var_value="${!var_name:-}"
+      else
+        var_value=""
+      fi
+      if [[ -z "$var_value" ]]; then
+        var_value="${PROPS[$var_name]:-}"
+      fi
+      value="${value//$var_token/$var_value}"
+    else
+      break
+    fi
+  done
+
+  printf '%s' "$value"
 }

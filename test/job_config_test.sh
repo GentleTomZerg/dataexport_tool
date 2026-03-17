@@ -42,8 +42,6 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 PROPS_FILE="$TMP_DIR/jobs.properties"
 cat > "$PROPS_FILE" <<'PROPS'
-JOBS=users,orders
-
 job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email
@@ -71,9 +69,9 @@ export EXPORT_DATE
 
 load_properties "$PROPS_FILE"
 
-# list_jobs should return two entries.
+# list_jobs should discover entries (including broken).
 mapfile -t jobs < <(list_jobs)
-assert_true "[[ ${#jobs[@]} -eq 2 ]]" "list_jobs count"
+assert_true "[[ ${#jobs[@]} -eq 3 ]]" "list_jobs count"
 
 # Load users job.
 load_job_config "users"

@@ -28,7 +28,7 @@
 
 ## Entry Points
 
-- `data_export.sh`
+- `export_data.sh`
   - Loads DB and job configs.
   - Expands runtime date variables.
   - Builds SQL and prints it per job.
@@ -49,8 +49,6 @@ primary.DB_TYPE=mysql
 ### `data_export.properties` (multi-job export)
 
 ```
-JOBS=users,orders
-
 job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email,created_at
@@ -72,7 +70,7 @@ job.<name>.FILTER.date.to=2024-01-31
 
 ## Runtime Date Variables
 
-Set by `data_export.sh`:
+Set by `export_data.sh`:
 
 - `${EXPORT_DATE}` (default today or `--date`)
 - `${TODAY}` (alias of `EXPORT_DATE`)
@@ -86,13 +84,13 @@ Set by `data_export.sh`:
 Print SQL for all jobs:
 
 ```
-./data_export.sh
+./export_data.sh
 ```
 
 Print SQL for specific jobs:
 
 ```
-./data_export.sh --jobs users,orders --date 2026-03-17
+./export_data.sh --jobs users,orders --date 2026-03-17
 ```
 
 ## Shell Compatibility

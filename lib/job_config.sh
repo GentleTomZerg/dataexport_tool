@@ -10,13 +10,23 @@ _JOB_CFG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_JOB_CFG_DIR/properties.sh"
 unset _JOB_CFG_DIR
 
-## List job names from JOBS property (comma-separated).
+## List job names.
+## Discover names from keys like: job.<name>.* in the loaded properties.
 ## Usage: list_jobs
 list_jobs() {
-  local jobs
-  jobs="$(get_prop "JOBS")"
-  [[ -z "$jobs" ]] && return 0
-  echo "$jobs" | tr ',' '\n' | awk '{$1=$1};1'
+  local key name
+  declare -A seen
+
+  while IFS= read -r key; do
+    name="${key#job.}"
+    name="${name%%.*}"
+    [[ -z "$name" ]] && continue
+    seen["$name"]=1
+  done < <(list_props_by_prefix "job.")
+
+  for name in "${!seen[@]}"; do
+    printf '%s\n' "$name"
+  done | sort
 }
 
 ## Load a single export job configuration from PROPS.

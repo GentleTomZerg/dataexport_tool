@@ -42,13 +42,23 @@ load_job_config() {
 }
 
 ## Collect filter definitions for a job into DATA_FILTERS array.
-## Supported formats:
-## - job.<name>.FILTER.<col>=value (defaults to '=')
-## - job.<name>.FILTER.<col>.value=value and optional job.<name>.FILTER.<col>.op=op
-## - BETWEEN via job.<name>.FILTER.<col>.from/.to and op=BETWEEN
-## Result format:
-## - "col|op|value" (single value)
-## - "col|BETWEEN|from|to"
+##
+## Filter properties (data_export.properties):
+## - Basic:
+##   job.<name>.FILTER.<col>=value
+## - With operator:
+##   job.<name>.FILTER.<col>.value=value
+##   job.<name>.FILTER.<col>.op=LIKE
+## - BETWEEN:
+##   job.<name>.FILTER.<col>.op=BETWEEN
+##   job.<name>.FILTER.<col>.from=2024-01-01
+##   job.<name>.FILTER.<col>.to=2024-01-31
+##
+## Output structure (DATA_FILTERS):
+## - "col|op|value" (single value; op defaults to '=')
+## - "col|BETWEEN|from|to" (range)
+##
+## This normalized array is consumed by lib/sql_builder.sh.
 load_job_filters() {
   local job="$1"
   local prefix="job.${job}.FILTER."

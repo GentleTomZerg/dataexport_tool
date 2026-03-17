@@ -5,6 +5,11 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
 fi
 set -euo pipefail
 
+# Self-contained: load properties helper when sourced directly.
+_DBCFG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_DBCFG_DIR/properties.sh"
+unset _DBCFG_DIR
+
 ## Load DB_* env vars for a named profile.
 ## Required keys: <profile>.DB_HOST, <profile>.DB_PORT, <profile>.DB_NAME, <profile>.DB_USER
 ## Usage: load_db_profile "primary"

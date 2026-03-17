@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$ROOT_DIR/lib/properties.sh"
-source "$ROOT_DIR/lib/db_profile.sh"
+source "$ROOT_DIR/lib/db_config.sh"
 source "$ROOT_DIR/lib/crypto.sh"
 
 # Example helper that prints DB config from env

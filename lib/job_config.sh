@@ -5,6 +5,11 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
 fi
 set -euo pipefail
 
+# Self-contained: load properties helper when sourced directly.
+_JOB_CFG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_JOB_CFG_DIR/properties.sh"
+unset _JOB_CFG_DIR
+
 ## List job names from JOBS property (comma-separated).
 ## Usage: list_jobs
 list_jobs() {

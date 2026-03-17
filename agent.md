@@ -13,13 +13,13 @@
 - `lib/properties.sh`
   - Loads `.properties` into an associative map.
   - Expands `${VAR}` placeholders using env vars and other properties (including dotted keys).
-- `lib/db_profile.sh`
+- `lib/db_config.sh`
   - Loads DB profile (host/port/name/user/type).
   - Builds password file path `{host}_{port}_{user}.pwd`.
   - Defaults `DB_TYPE=mysql` if not set.
 - `lib/crypto.sh`
   - Encrypt/decrypt passwords using `openssl` and `DB_PASSWORD_KEY`.
-- `lib/export_config.sh`
+- `lib/job_config.sh`
   - Loads a single job config and its filters from `data_export.properties`.
 - `lib/sql_builder.sh`
   - Builds a `SELECT` with filters, supports `BETWEEN`.

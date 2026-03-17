@@ -8,9 +8,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/properties.sh"
-source "$ROOT_DIR/lib/db_profile.sh"
+source "$ROOT_DIR/lib/db_config.sh"
 source "$ROOT_DIR/lib/crypto.sh"
-source "$ROOT_DIR/lib/export_config.sh"
+source "$ROOT_DIR/lib/job_config.sh"
 source "$ROOT_DIR/lib/sql_builder.sh"
 source "$ROOT_DIR/lib/sql_exec.sh"
 

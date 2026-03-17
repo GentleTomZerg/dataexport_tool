@@ -53,16 +53,20 @@ load_properties() {
     [[ -z "$key" ]] && continue
     PROPS["$key"]="$value"
   done < <(
-    awk -F'=' '
+    awk '
       {
         sub(/\r$/, "", $0)
         line=$0
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
         if (line == "" || line ~ /^#/ || line ~ /^;/) next
-        key=$1
-        $1=""
-        sub(/^=/, "", $0)
-        val=$0
+        pos = index(line, "=")
+        if (pos == 0) {
+          key = line
+          val = ""
+        } else {
+          key = substr(line, 1, pos - 1)
+          val = substr(line, pos + 1)
+        }
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
         gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
         if (key != "") print key "\t" val

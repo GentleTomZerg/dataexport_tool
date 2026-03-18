@@ -6,7 +6,7 @@
 - Separate DB profile config from export job config.
 - Provide modular, testable shell libraries
 - Default DB type is MySQL.
-- Current mode prints SQL only (no execution).
+- Default mode prints SQL only (use `--execute` to run).
 
 ## Modules (lib/)
 
@@ -23,7 +23,7 @@
 
 ## Toolkit
 
-- `tools/password_tool.sh`
+- `bin/password_tool.sh`
   - Encodes and writes a profile-based password file under `DB_PASSWORD_DIR`.
 - `lib/job_config.sh`
   - Loads a single job config and its filters from `export_jobs.properties`.
@@ -35,15 +35,15 @@
 
 ## Entry Points
 
-- `export_data.sh`
+- `bin/export_data.sh`
   - Loads DB and job configs.
   - Expands runtime date variables.
   - Builds SQL and prints it per job.
-  - No actual DB execution.
+  - `--execute` runs `lib/sql_exec.sh` and writes export files.
 
 ## Config Files
 
-### `env.properties` (DB profiles)
+### `etc/local/env.properties` (DB profiles)
 
 ```
 primary.DB_HOST=localhost
@@ -51,9 +51,10 @@ primary.DB_PORT=3306
 primary.DB_NAME=example_db
 primary.DB_USER=example_user
 primary.DB_TYPE=mysql
+DB_PASSWORD_DIR=./etc/local/pwd
 ```
 
-### `export_jobs.properties` (multi-job export)
+### `etc/local/config/export_jobs.properties` (multi-job export)
 
 ```
 job.users.DB_PROFILE=primary
@@ -79,7 +80,7 @@ job.<name>.FILTER.date.to=2024-01-31
 
 ## Runtime Date Variables
 
-Set by `export_data.sh`:
+Set by `bin/export_data.sh`:
 
 - `${EXPORT_DATE}` (default today or `--date`)
 - `${TODAY}` (alias of `EXPORT_DATE`)
@@ -93,20 +94,36 @@ Set by `export_data.sh`:
 Print SQL for all jobs:
 
 ```
-./export_data.sh
+./bin/export_data.sh
 ```
 
 Print SQL for specific jobs:
 
 ```
-./export_data.sh --jobs users,orders --date 2026-03-17
+./bin/export_data.sh --jobs users,orders --date 2026-03-17
 ```
 
 Execute exports for specific jobs:
 
 ```
-./export_data.sh --jobs users,orders --date 2026-03-17 --execute
+./bin/export_data.sh --jobs users,orders --date 2026-03-17 --execute
 ```
+
+## Passwords
+
+- Password files are named `{DB_HOST}_{DB_PORT}_{DB_USER}.pwd` under `DB_PASSWORD_DIR`.
+- Encryption/decryption uses `openssl des3 ... -pbkdf2 -iter 100000` with a key file (`DB_PASSWORD_KEY_FILE`).
+- Use the toolkit entry to generate password files:
+
+```
+bin/password_tool.sh --db-props etc/local/env.properties --db-profile primary --password '...' --key-file /path/to/keyfile
+```
+
+## Tests Added
+
+- `test/crypto_test.sh` (fake `openssl` arg checks)
+- `test/sql_exec_test.sh` (fake `mysql`/`psql`, separators, password file usage)
+- `test/export_exec_test.sh` (end-to-end `--execute` wiring)
 
 ## Shell Compatibility
 

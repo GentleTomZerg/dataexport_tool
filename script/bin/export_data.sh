@@ -6,7 +6,7 @@ fi
 set -euo pipefail
 shopt -s extglob
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/db_config.sh"
 source "$ROOT_DIR/lib/crypto.sh"
@@ -17,7 +17,7 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  ./export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
+  export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
 
 Environment:
   (none)
@@ -25,8 +25,8 @@ EOF
 }
 
 parse_args() {
-  DB_PROPS="env.properties"
-  DATA_PROPS="export_jobs.properties"
+  DB_PROPS="$ROOT_DIR/etc/local/env.properties"
+  DATA_PROPS="$ROOT_DIR/etc/local/config/export_jobs.properties"
   JOBS_ARG=""
   RUN_DATE=""
   SHOW_HELP=0

@@ -14,7 +14,7 @@ source "$ROOT_DIR/lib/crypto.sh"
 usage() {
   cat <<'USAGE'
 Usage:
-  tools/password_tool.sh [--db-props file] [--db-profile name] --password value --key-file path
+  password_tool.sh [--db-props file] [--db-profile name] --password value --key-file path
 
 Notes:
 - --password and --key-file are required (no interactive prompts).
@@ -23,7 +23,7 @@ USAGE
 }
 
 parse_args() {
-  DB_PROPS="env.properties"
+  DB_PROPS="$ROOT_DIR/etc/local/env.properties"
   DB_PROFILE="primary"
   INPUT_PASSWORD=""
   INPUT_KEY_FILE=""

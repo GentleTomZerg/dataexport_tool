@@ -33,6 +33,7 @@ FAKE_BIN="$TMP_DIR/bin"
 mkdir -p "$FAKE_BIN"
 
 MYSQL_LOG="$TMP_DIR/mysql.log"
+export MYSQL_LOG
 
 cat > "$FAKE_BIN/mysql" <<'FAKE'
 #!/usr/bin/env bash
@@ -53,7 +54,7 @@ primary.DB_PORT=3306
 primary.DB_NAME=example_db
 primary.DB_USER=example_user
 primary.DB_TYPE=mysql
-DB_PASSWORD_DIR=./secrets
+DB_PASSWORD_DIR=./etc/local/pwd
 PROPS
 
 cat > "$DATA_PROPS" <<'PROPS'
@@ -69,10 +70,11 @@ PROPS
 sed -i "s#__OUT_FILE__#$OUT_FILE#" "$DATA_PROPS"
 
 PATH="$FAKE_BIN:$PATH" \
-  "$ROOT_DIR/export_data.sh" --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --job users --date 2026-03-17 --execute >/dev/null
+  "$ROOT_DIR/bin/export_data.sh" --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --job users --date 2026-03-17 --execute >/dev/null
 
 assert_true "[[ -f '$OUT_FILE' ]]" "export output file exists"
-assert_eq "1|Alice\n2|Bob\n" "$(cat "$OUT_FILE")" "export output formatting"
+printf '1|Alice\n2|Bob\n' >"$TMP_DIR/expected_export.out"
+assert_true "cmp -s '$TMP_DIR/expected_export.out' '$OUT_FILE'" "export output formatting"
 
 # Ensure mysql was invoked.
 assert_true "[[ -s '$MYSQL_LOG' ]]" "mysql invoked"

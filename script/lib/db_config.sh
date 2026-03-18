@@ -12,7 +12,7 @@ unset _DBCFG_DIR
 
 ## Load DB_* env vars for a named profile.
 ## Required keys: <profile>.DB_HOST, <profile>.DB_PORT, <profile>.DB_NAME, <profile>.DB_USER
-## Optional keys: DB_PASSWORD_DIR (defaults to ./secrets)
+## Optional keys: DB_PASSWORD_DIR (defaults to ./etc/local/pwd)
 ## Usage: load_db_profile "primary"
 load_db_profile() {
   local profile="$1"
@@ -40,6 +40,6 @@ load_db_profile() {
 db_password_file() {
   local dir
   dir="$(get_prop "DB_PASSWORD_DIR")"
-  [[ -z "$dir" ]] && dir="./secrets"
+  [[ -z "$dir" ]] && dir="./etc/local/pwd"
   printf '%s/%s_%s_%s.pwd' "$dir" "$DB_HOST" "$DB_PORT" "$DB_USER"
 }

@@ -26,8 +26,8 @@ _sql_exec_password_from_file() {
 _sql_exec_with_mysql() {
   local sql="$1"
   local out_file="$2"
-  local field_sep="$3"
-  local line_term="$4"
+  local field_sep_raw="$3"
+  local line_term_raw="$4"
   local db_password="$5"
 
   if [[ -n "$db_password" ]]; then
@@ -37,22 +37,22 @@ _sql_exec_with_mysql() {
       -P "$DB_PORT" \
       -u "$DB_USER" \
       "$DB_NAME" \
-      -e "$sql" | awk -v FS='\t' -v OFS="$field_sep" -v ORS="$line_term" '{ $1=$1; print }' >"$out_file"
+      -e "$sql" | awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
   else
     mysql --batch --raw --skip-column-names \
       -h "$DB_HOST" \
       -P "$DB_PORT" \
       -u "$DB_USER" \
       "$DB_NAME" \
-      -e "$sql" | awk -v FS='\t' -v OFS="$field_sep" -v ORS="$line_term" '{ $1=$1; print }' >"$out_file"
+      -e "$sql" | awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
   fi
 }
 
 _sql_exec_with_postgres() {
   local sql="$1"
   local out_file="$2"
-  local field_sep="$3"
-  local line_term="$4"
+  local field_sep_raw="$3"
+  local line_term_raw="$4"
   local db_password="$5"
 
   if [[ -n "$db_password" ]]; then
@@ -62,7 +62,7 @@ _sql_exec_with_postgres() {
       -U "$DB_USER" \
       -d "$DB_NAME" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-      awk -v FS='\t' -v OFS="$field_sep" -v ORS="$line_term" '{ $1=$1; print }' >"$out_file"
+      awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
   else
     psql \
       -h "$DB_HOST" \
@@ -70,7 +70,7 @@ _sql_exec_with_postgres() {
       -U "$DB_USER" \
       -d "$DB_NAME" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-      awk -v FS='\t' -v OFS="$field_sep" -v ORS="$line_term" '{ $1=$1; print }' >"$out_file"
+      awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
   fi
 }
 
@@ -80,11 +80,9 @@ sql_exec_export() {
   local db_type="${DB_TYPE:-mysql}"
   local field_sep_raw="${3:-${DATA_FIELD_SEPARATOR:-\\t}}"
   local line_term_raw="${4:-${DATA_LINE_TERMINATOR:-\\n}}"
-  local field_sep line_term
   local pwd_file db_password=""
 
-  field_sep="$(printf '%b' "$field_sep_raw")"
-  line_term="$(printf '%b' "$line_term_raw")"
+  :
 
   if [[ -z "$out_file" ]]; then
     echo "Missing export output file path" >&2
@@ -99,10 +97,10 @@ sql_exec_export() {
 
   case "$db_type" in
     mysql)
-      _sql_exec_with_mysql "$sql" "$out_file" "$field_sep" "$line_term" "$db_password"
+      _sql_exec_with_mysql "$sql" "$out_file" "$field_sep_raw" "$line_term_raw" "$db_password"
       ;;
     postgres)
-      _sql_exec_with_postgres "$sql" "$out_file" "$field_sep" "$line_term" "$db_password"
+      _sql_exec_with_postgres "$sql" "$out_file" "$field_sep_raw" "$line_term_raw" "$db_password"
       ;;
     *)
       echo "Unsupported DB_TYPE: $db_type" >&2

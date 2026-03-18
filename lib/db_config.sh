@@ -12,6 +12,7 @@ unset _DBCFG_DIR
 
 ## Load DB_* env vars for a named profile.
 ## Required keys: <profile>.DB_HOST, <profile>.DB_PORT, <profile>.DB_NAME, <profile>.DB_USER
+## Optional keys: DB_PASSWORD_DIR (defaults to ./secrets)
 ## Usage: load_db_profile "primary"
 load_db_profile() {
   local profile="$1"
@@ -28,7 +29,9 @@ load_db_profile() {
     return 1
   fi
 
-  export DB_HOST DB_PORT DB_NAME DB_USER DB_TYPE
+  DB_PASSWORD_FILE="$(db_password_file)"
+
+  export DB_HOST DB_PORT DB_NAME DB_USER DB_TYPE DB_PASSWORD_FILE
 }
 
 ## Build the encrypted password file path based on current DB_* values.

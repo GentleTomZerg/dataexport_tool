@@ -20,7 +20,7 @@ Usage:
   ./export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD]
 
 Environment:
-  DB_PASSWORD_KEY  Passphrase used by openssl for decrypt.
+  (none)
 EOF
 }
 
@@ -33,40 +33,40 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --db-props)
-        DB_PROPS="$2"
-        shift 2
-        ;;
-      --db-profile)
-        DB_PROFILE="$2"
-        shift 2
-        ;;
-      --data-props)
-        DATA_PROPS="$2"
-        shift 2
-        ;;
-      --job)
-        JOBS_ARG="$2"
-        shift 2
-        ;;
-      --jobs)
-        JOBS_ARG="$2"
-        shift 2
-        ;;
-      --date)
-        RUN_DATE="$2"
-        shift 2
-        ;;
-      -h|--help)
-        usage
-        SHOW_HELP=1
-        return 0
-        ;;
-      *)
-        echo "Unknown arg: $1" >&2
-        usage >&2
-        return 1
-        ;;
+    --db-props)
+      DB_PROPS="$2"
+      shift 2
+      ;;
+    --db-profile)
+      DB_PROFILE="$2"
+      shift 2
+      ;;
+    --data-props)
+      DATA_PROPS="$2"
+      shift 2
+      ;;
+    --job)
+      JOBS_ARG="$2"
+      shift 2
+      ;;
+    --jobs)
+      JOBS_ARG="$2"
+      shift 2
+      ;;
+    --date)
+      RUN_DATE="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      SHOW_HELP=1
+      return 0
+      ;;
+    *)
+      echo "Unknown arg: $1" >&2
+      usage >&2
+      return 1
+      ;;
     esac
   done
 }
@@ -100,7 +100,7 @@ load_job_config_file() {
 
 resolve_jobs() {
   if [[ -n "$JOBS_ARG" ]]; then
-    IFS=',' read -r -a JOBS_LIST <<< "$JOBS_ARG"
+    IFS=',' read -r -a JOBS_LIST <<<"$JOBS_ARG"
   else
     mapfile -t JOBS_LIST < <(list_jobs)
   fi

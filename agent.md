@@ -18,13 +18,20 @@
   - Builds password file path `{host}_{port}_{user}.pwd`.
   - Defaults `DB_TYPE=mysql` if not set.
 - `lib/crypto.sh`
-  - Encrypt/decrypt passwords using `openssl` and `DB_PASSWORD_KEY`.
+  - Encrypt/decrypt passwords using `openssl` and `DB_PASSWORD_KEY_FILE` (path to key file).
+  - `write_db_password_file` writes the profile-based `{host}_{port}_{user}.pwd`.
+
+## Toolkit
+
+- `tools/password_tool.sh`
+  - Encodes and writes a profile-based password file under `DB_PASSWORD_DIR`.
 - `lib/job_config.sh`
   - Loads a single job config and its filters from `export_jobs.properties`.
+  - Loads optional field/line separators (defaults: `\t`, `\n`).
 - `lib/sql_builder.sh`
   - Builds a `SELECT` with filters, supports `BETWEEN`.
 - `lib/sql_exec.sh`
-  - SQL executor (currently PostgreSQL only). Not used in default flow.
+  - SQL executor (mysql default, postgres supported). Uses password file if present. Not used in default flow.
 
 ## Entry Points
 
@@ -53,6 +60,8 @@ job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email,created_at
 job.users.EXPORT_FILE=./exports/${job.users.TABLE_NAME}_${EXPORT_DATE}.csv
+job.users.FIELD_SEPARATOR=|
+job.users.LINE_TERMINATOR=\n
 job.users.FILTER.status=active
 ```
 

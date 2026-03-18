@@ -46,6 +46,8 @@ job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email
 job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
+job.users.FIELD_SEPARATOR=|
+job.users.LINE_TERMINATOR=\r\n
 job.users.FILTER.status=active
 job.users.FILTER.name.value=%bob%
 job.users.FILTER.name.op=LIKE
@@ -94,6 +96,8 @@ assert_eq "primary" "$DATA_DB_PROFILE" "db profile"
 assert_eq "users" "$DATA_TABLE" "table name"
 assert_eq "id,name,email" "$DATA_COLUMNS" "columns"
 assert_eq "./exports/users_2026-03-17.csv" "$DATA_EXPORT_FILE" "export file expansion"
+assert_eq "|" "$DATA_FIELD_SEPARATOR" "field separator"
+assert_eq "\\r\\n" "$DATA_LINE_TERMINATOR" "line terminator"
 
 # Filters: collect and compare as a set because order is not guaranteed.
 load_job_filters "users"
@@ -110,6 +114,8 @@ assert_eq "${expected[*]}" "${filters[*]}" "users filters set"
 load_job_config "orders"
 assert_eq "" "$DATA_DB_PROFILE" "orders db profile empty"
 assert_eq "" "$DATA_EXPORT_FILE" "orders export file empty"
+assert_eq "\\t" "$DATA_FIELD_SEPARATOR" "orders field separator default"
+assert_eq "\\n" "$DATA_LINE_TERMINATOR" "orders line terminator default"
 load_job_filters "orders"
 assert_eq "total|>=|100" "${DATA_FILTERS[0]}" "orders filter"
 

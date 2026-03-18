@@ -72,6 +72,7 @@ assert_eq "3306" "$DB_PORT" "load primary port"
 assert_eq "example_db" "$DB_NAME" "load primary name"
 assert_eq "example_user" "$DB_USER" "load primary user"
 assert_eq "mysql" "$DB_TYPE" "default DB_TYPE to mysql"
+assert_eq "/tmp/secrets/localhost_3306_example_user.pwd" "$DB_PASSWORD_FILE" "password file path export"
 assert_eq "/tmp/secrets/localhost_3306_example_user.pwd" "$(db_password_file)" "password file path"
 
 # Reporting profile should load its explicit DB_TYPE.

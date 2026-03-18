@@ -31,7 +31,9 @@ list_jobs() {
 
 ## Load a single export job configuration from PROPS.
 ## Required keys: job.<name>.TABLE_NAME, job.<name>.COLUMNS
-## Optional keys: job.<name>.DB_PROFILE, job.<name>.EXPORT_FILE, job.<name>.FILTER.*
+## Optional keys: job.<name>.DB_PROFILE, job.<name>.EXPORT_FILE,
+##                job.<name>.FIELD_SEPARATOR, job.<name>.LINE_TERMINATOR,
+##                job.<name>.FILTER.*
 ## Usage: load_job_config "job1"
 load_job_config() {
   local job="$1"
@@ -42,6 +44,11 @@ load_job_config() {
   DATA_TABLE="$(get_prop "${prefix}TABLE_NAME")"
   DATA_COLUMNS="$(get_prop "${prefix}COLUMNS")"
   DATA_EXPORT_FILE="$(get_prop "${prefix}EXPORT_FILE")"
+  DATA_FIELD_SEPARATOR="$(get_prop "${prefix}FIELD_SEPARATOR")"
+  DATA_LINE_TERMINATOR="$(get_prop "${prefix}LINE_TERMINATOR")"
+
+  [[ -z "$DATA_FIELD_SEPARATOR" ]] && DATA_FIELD_SEPARATOR="\\t"
+  [[ -z "$DATA_LINE_TERMINATOR" ]] && DATA_LINE_TERMINATOR="\\n"
 
   if [[ -z "$DATA_TABLE" || -z "$DATA_COLUMNS" ]]; then
     echo "Missing TABLE_NAME or COLUMNS for job: $job" >&2
@@ -49,6 +56,7 @@ load_job_config() {
   fi
 
   export DATA_JOB DATA_DB_PROFILE DATA_TABLE DATA_COLUMNS DATA_EXPORT_FILE
+  export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
 }
 
 ## Collect filter definitions for a job into DATA_FILTERS array.

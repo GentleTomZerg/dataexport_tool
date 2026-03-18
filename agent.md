@@ -102,6 +102,12 @@ Print SQL for specific jobs:
 ./export_data.sh --jobs users,orders --date 2026-03-17
 ```
 
+Execute exports for specific jobs:
+
+```
+./export_data.sh --jobs users,orders --date 2026-03-17 --execute
+```
+
 ## Shell Compatibility
 
 - support sh

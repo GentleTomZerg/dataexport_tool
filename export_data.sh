@@ -17,7 +17,7 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  ./export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD]
+  ./export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
 
 Environment:
   (none)
@@ -30,6 +30,7 @@ parse_args() {
   JOBS_ARG=""
   RUN_DATE=""
   SHOW_HELP=0
+  EXECUTE=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -56,6 +57,10 @@ parse_args() {
     --date)
       RUN_DATE="$2"
       shift 2
+      ;;
+    --execute)
+      EXECUTE=1
+      shift 1
       ;;
     -h | --help)
       usage
@@ -136,7 +141,14 @@ run_jobs() {
     echo "EXPORT_FILE=${DATA_EXPORT_FILE:-}"
     echo
 
-    # TODO: wire sql_exec once the execution flow is finalized.
+    if [[ "$EXECUTE" -eq 1 ]]; then
+      if [[ -z "${DATA_EXPORT_FILE:-}" ]]; then
+        echo "Missing EXPORT_FILE for job: $job" >&2
+        return 1
+      fi
+      mkdir -p "$(dirname "$DATA_EXPORT_FILE")"
+      sql_exec_export "$SQL" "$DATA_EXPORT_FILE" "$DATA_FIELD_SEPARATOR" "$DATA_LINE_TERMINATOR"
+    fi
   done
 }
 

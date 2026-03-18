@@ -26,7 +26,7 @@ EOF
 
 parse_args() {
   DB_PROPS="env.properties"
-  DATA_PROPS="data_export.properties"
+  DATA_PROPS="export_jobs.properties"
   JOBS_ARG=""
   RUN_DATE=""
   SHOW_HELP=0
@@ -81,7 +81,7 @@ init_runtime_dates() {
   export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"
   export EXPORT_MONTH="$(date -d "$EXPORT_DATE" +%Y-%m)"
   export MONTH_START="$(date -d "$EXPORT_DATE" +%Y-%m-01)"
-  export MONTH_END="$(date -d "$EXPORT_DATE +1 month -1 day" +%F)"
+  export MONTH_END="$(date -d "$MONTH_START +1 month -1 day" +%F)"
 }
 
 load_db_config() {
@@ -106,7 +106,7 @@ resolve_jobs() {
   fi
 
   if [[ "${#JOBS_LIST[@]}" -eq 0 ]]; then
-    echo "No jobs specified. Use --job/--jobs or define job.<name>.* in data_export.properties." >&2
+    echo "No jobs specified. Use --job/--jobs or define job.<name>.* in export_jobs.properties." >&2
     return 1
   fi
 }

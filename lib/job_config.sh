@@ -53,7 +53,7 @@ load_job_config() {
 
 ## Collect filter definitions for a job into DATA_FILTERS array.
 ##
-## Filter properties (data_export.properties):
+## Filter properties (export_jobs.properties):
 ## - Basic:
 ##   job.<name>.FILTER.<col>=value
 ## - With operator:

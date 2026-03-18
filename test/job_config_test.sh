@@ -59,6 +59,20 @@ job.orders.COLUMNS=id,total,created_at
 job.orders.FILTER.total.value=100
 job.orders.FILTER.total.op=>=
 
+job.daily_events.TABLE_NAME=events
+job.daily_events.COLUMNS=id,type,created_at
+job.daily_events.EXPORT_FILE=./exports/events_${YESTERDAY}.csv
+job.daily_events.FILTER.created_at.op=BETWEEN
+job.daily_events.FILTER.created_at.from=${YESTERDAY}
+job.daily_events.FILTER.created_at.to=${TODAY}
+
+job.monthly_events.TABLE_NAME=events
+job.monthly_events.COLUMNS=id,type,created_at
+job.monthly_events.EXPORT_FILE=./exports/events_${EXPORT_MONTH}.csv
+job.monthly_events.FILTER.created_at.op=BETWEEN
+job.monthly_events.FILTER.created_at.from=${MONTH_START}
+job.monthly_events.FILTER.created_at.to=${MONTH_END}
+
 # Broken job (missing columns)
 job.broken.TABLE_NAME=broken_table
 PROPS
@@ -69,9 +83,9 @@ export EXPORT_DATE
 
 load_properties "$PROPS_FILE"
 
-# list_jobs should discover entries (including broken).
+# list_jobs should discover entries (including broken and date-based).
 mapfile -t jobs < <(list_jobs)
-assert_true "[[ ${#jobs[@]} -eq 3 ]]" "list_jobs count"
+assert_true "[[ ${#jobs[@]} -eq 5 ]]" "list_jobs count"
 
 # Load users job.
 load_job_config "users"

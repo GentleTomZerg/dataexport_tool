@@ -20,7 +20,7 @@
 - `lib/crypto.sh`
   - Encrypt/decrypt passwords using `openssl` and `DB_PASSWORD_KEY`.
 - `lib/job_config.sh`
-  - Loads a single job config and its filters from `data_export.properties`.
+  - Loads a single job config and its filters from `export_jobs.properties`.
 - `lib/sql_builder.sh`
   - Builds a `SELECT` with filters, supports `BETWEEN`.
 - `lib/sql_exec.sh`
@@ -46,7 +46,7 @@ primary.DB_USER=example_user
 primary.DB_TYPE=mysql
 ```
 
-### `data_export.properties` (multi-job export)
+### `export_jobs.properties` (multi-job export)
 
 ```
 job.users.DB_PROFILE=primary

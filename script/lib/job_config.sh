@@ -34,7 +34,7 @@ list_jobs() {
 ## Required keys: job.<name>.TABLE_NAME, job.<name>.COLUMNS
 ## Optional keys: job.<name>.DB_PROFILE, job.<name>.EXPORT_FILE,
 ##                job.<name>.FIELD_SEPARATOR, job.<name>.LINE_TERMINATOR,
-##                job.<name>.FILTER.*
+##                job.<name>.FILTER.*, job.<name>.SPLIT.<col>
 ## Usage: load_job_config "job1"
 load_job_config() {
   local job="$1"
@@ -58,6 +58,42 @@ load_job_config() {
 
   export DATA_JOB DATA_DB_PROFILE DATA_TABLE DATA_COLUMNS DATA_EXPORT_FILE
   export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
+}
+
+## Collect split column definitions for a job into DATA_SPLITS array.
+##
+## Split properties (export_jobs.properties), Option B:
+##   job.<name>.SPLIT.<col>=<chunk_size>,<chunks>
+##
+## Output structure (DATA_SPLITS):
+## - "col|chunk_size|chunks"
+##
+## Notes:
+## - Only columns listed in DATA_COLUMNS are actually split.
+## - Invalid or incomplete split values are ignored.
+load_job_splits() {
+  local job="$1"
+  local prefix="job.${job}.SPLIT."
+  DATA_SPLITS=()
+  local key col value chunk_size chunks extra
+
+  while IFS= read -r key; do
+    col="${key#${prefix}}"
+    [[ -z "$col" ]] && continue
+    value="$(get_prop "$key")"
+    IFS=',' read -r chunk_size chunks extra <<<"$value"
+    chunk_size="$(trim "${chunk_size:-}")"
+    chunks="$(trim "${chunks:-}")"
+
+    [[ "$chunk_size" =~ ^[0-9]+$ ]] || continue
+    [[ "$chunks" =~ ^[0-9]+$ ]] || continue
+    [[ "$chunk_size" -gt 0 ]] || continue
+    [[ "$chunks" -gt 0 ]] || continue
+
+    DATA_SPLITS+=("${col}|${chunk_size}|${chunks}")
+  done < <(list_props_by_prefix "$prefix")
+
+  export DATA_SPLITS
 }
 
 ## Collect filter definitions for a job into DATA_FILTERS array.

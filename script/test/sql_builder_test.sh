@@ -50,4 +50,11 @@ assert_eq "SELECT id,name,email FROM users WHERE note = 'O''Brien'" "$(build_sel
 DATA_FILTERS=("status|=|active" "created_at|BETWEEN|2024-01-01|2024-01-31" "score|>|10")
 assert_eq "SELECT id,name,email FROM users WHERE status = 'active' AND created_at BETWEEN '2024-01-01' AND '2024-01-31' AND score > '10'" "$(build_select_sql)" "mixed operators"
 
+# 8) Split columns (mysql only): remove original and add chunked pieces.
+DB_TYPE="mysql"
+DATA_COLUMNS="id,content,email"
+DATA_FILTERS=()
+DATA_SPLITS=("content|4|3")
+assert_eq "SELECT id,SUBSTRING(content, 1, 4) AS content_part1,SUBSTRING(content, 5, 4) AS content_part2,SUBSTRING(content, 9, 4) AS content_part3,email FROM users" "$(build_select_sql)" "split columns"
+
 echo "OK: sql_builder_test.sh"

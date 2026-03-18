@@ -29,8 +29,10 @@
 - `lib/job_config.sh`
   - Loads a single job config and its filters from `export_jobs.properties`.
   - Loads optional field/line separators (defaults: `\t`, `\n`).
+  - Loads optional split-column rules (Option B: `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`).
 - `lib/sql_builder.sh`
   - Builds a `SELECT` with filters, supports `BETWEEN`.
+  - For MySQL only, can expand TEXT columns into chunked `SUBSTRING` pieces and omit the original column.
 - `lib/sql_exec.sh`
   - SQL executor (mysql default, postgres supported). Uses password file if present. Not used in default flow.
   - Output formatting rewrites tab-separated results to custom separators via `awk`.
@@ -136,3 +138,22 @@ bin/password_tool.sh --db-props etc/local/env.properties --db-profile primary --
 ## Shell Compatibility
 
 - Bash only (not POSIX `sh`).
+
+## Split Columns (MySQL Only)
+
+Use this when a TEXT column is too large and you need fixed-size chunks.
+Only applies to MySQL; other DB types ignore the split rules.
+
+Config (Option B):
+
+```
+job.users.SPLIT.content=4000,3
+```
+
+Behavior:
+- `content` will be replaced with:
+  - `SUBSTRING(content, 1, 4000) AS content_part1`
+  - `SUBSTRING(content, 4001, 4000) AS content_part2`
+  - `SUBSTRING(content, 8001, 4000) AS content_part3`
+- The original `content` column is not selected.
+- If the column is longer than the configured chunks, the rest is dropped.

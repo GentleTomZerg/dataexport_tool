@@ -4,11 +4,63 @@ if [[ -z "${BASH_VERSION:-}" ]]; then
   return 1 2>/dev/null || exit 1
 fi
 set -euo pipefail
+shopt -s extglob
+
+_sql_trim() {
+  local s="$1"
+  s="${s##+([[:space:]])}"
+  s="${s%%+([[:space:]])}"
+  printf '%s' "$s"
+}
 
 sql_escape_literal() {
   local s="$1"
   s="${s//\'/\'\'}"
   printf '%s' "$s"
+}
+
+_sql_build_select_columns() {
+  local columns_raw="$1"
+  local db_type="${DB_TYPE:-mysql}"
+  local raw_columns=()
+  local columns=()
+  local item col
+
+  IFS=',' read -r -a raw_columns <<<"$columns_raw"
+  for item in "${raw_columns[@]}"; do
+    col="$(_sql_trim "$item")"
+    [[ -z "$col" ]] && continue
+    columns+=("$col")
+  done
+
+  if [[ ${DATA_SPLITS+set} && "$db_type" == "mysql" ]]; then
+    declare -A split_size split_chunks
+    local split_item split_col size chunks
+    for split_item in "${DATA_SPLITS[@]}"; do
+      IFS='|' read -r split_col size chunks <<<"$split_item"
+      split_size["$split_col"]="$size"
+      split_chunks["$split_col"]="$chunks"
+    done
+
+    local final_cols=()
+    local i start size_val chunks_val
+    for col in "${columns[@]}"; do
+      size_val="${split_size[$col]:-}"
+      chunks_val="${split_chunks[$col]:-}"
+      if [[ -n "$size_val" && -n "$chunks_val" ]]; then
+        for ((i = 1; i <= chunks_val; i++)); do
+          start=$(((i - 1) * size_val + 1))
+          final_cols+=("SUBSTRING(${col}, ${start}, ${size_val}) AS ${col}_part${i}")
+        done
+      else
+        final_cols+=("$col")
+      fi
+    done
+    printf '%s' "$(IFS=,; echo "${final_cols[*]}")"
+    return
+  fi
+
+  printf '%s' "$(IFS=,; echo "${columns[*]}")"
 }
 
 ## Build a SELECT SQL from DATA_TABLE, DATA_COLUMNS, DATA_FILTERS.
@@ -28,7 +80,9 @@ sql_escape_literal() {
 ##
 ## Usage: sql="$(build_select_sql)"
 build_select_sql() {
-  local sql="SELECT ${DATA_COLUMNS} FROM ${DATA_TABLE}"
+  local select_cols
+  select_cols="$(_sql_build_select_columns "$DATA_COLUMNS")"
+  local sql="SELECT ${select_cols} FROM ${DATA_TABLE}"
   local where_parts=()
   local item col op v1 v2 esc
 

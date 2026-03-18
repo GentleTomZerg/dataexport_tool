@@ -131,6 +131,7 @@ run_jobs() {
     # Load per-job settings and filters from properties.
     load_job_config "$job"
     load_job_filters "$job"
+    load_job_splits "$job"
 
     # Switch DB profile if job overrides it.
     if [[ -n "$DATA_DB_PROFILE" && "$DATA_DB_PROFILE" != "$DB_PROFILE" ]]; then

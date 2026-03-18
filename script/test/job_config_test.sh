@@ -54,6 +54,8 @@ job.users.FILTER.name.op=LIKE
 job.users.FILTER.signup.op=BETWEEN
 job.users.FILTER.signup.from=2024-01-01
 job.users.FILTER.signup.to=2024-01-31
+job.users.SPLIT.content=4000,3
+job.users.SPLIT.notes=2000,2
 
 job.orders.TABLE_NAME=orders
 job.orders.COLUMNS=id,total,created_at
@@ -109,6 +111,16 @@ signup|BETWEEN|2024-01-01|2024-01-31
 EXPECT
 )
 assert_eq "${expected[*]}" "${filters[*]}" "users filters set"
+
+# Split columns.
+load_job_splits "users"
+mapfile -t splits < <(printf '%s\n' "${DATA_SPLITS[@]}" | sort)
+mapfile -t expected_splits < <(cat <<'EXPECT' | sort
+content|4000|3
+notes|2000|2
+EXPECT
+)
+assert_eq "${expected_splits[*]}" "${splits[*]}" "users split set"
 
 # Orders job: no DB_PROFILE/EXPORT_FILE, single filter with op.
 load_job_config "orders"

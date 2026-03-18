@@ -12,6 +12,7 @@
 
 - `lib/properties.sh`
   - Loads `.properties` into an associative map.
+  - Merges into the existing `PROPS` map (does not clear it).
   - Expands `${VAR}` placeholders using env vars and other properties (including dotted keys).
 - `lib/db_config.sh`
   - Loads DB profile (host/port/name/user/type).
@@ -32,6 +33,7 @@
   - Builds a `SELECT` with filters, supports `BETWEEN`.
 - `lib/sql_exec.sh`
   - SQL executor (mysql default, postgres supported). Uses password file if present. Not used in default flow.
+  - Output formatting rewrites tab-separated results to custom separators via `awk`.
 
 ## Entry Points
 
@@ -89,6 +91,12 @@ Set by `bin/export_data.sh`:
 - `${MONTH_START}` (YYYY-MM-01)
 - `${MONTH_END}` (last day of month)
 
+## Platform Notes
+
+- Scripts require `bash` (associative arrays, `[[ ]]`, and `extglob` are used).
+- `bin/export_data.sh` depends on GNU `date` (`date -d`).
+- `openssl`, `mysql`, and `psql` are required only when those code paths are used.
+
 ## Usage
 
 Print SQL for all jobs:
@@ -127,4 +135,4 @@ bin/password_tool.sh --db-props etc/local/env.properties --db-profile primary --
 
 ## Shell Compatibility
 
-- support sh
+- Bash only (not POSIX `sh`).

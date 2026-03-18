@@ -21,6 +21,10 @@ Usage:
 
 Environment:
   (none)
+
+Notes:
+  - Requires bash and GNU date (uses `date -d` for relative date math).
+  - Default behavior prints SQL only. Use --execute to run exports.
 EOF
 }
 
@@ -81,6 +85,7 @@ init_runtime_dates() {
   if [[ -z "$run_date" ]]; then
     run_date="$(date +%F)"
   fi
+  # Uses GNU date for relative date math (e.g., "-1 day").
   export EXPORT_DATE="$run_date"
   export TODAY="$EXPORT_DATE"
   export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"

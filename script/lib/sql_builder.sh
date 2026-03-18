@@ -8,7 +8,7 @@ set -euo pipefail
 sql_escape_literal() {
   local s="$1"
   s="${s//\'/\'\'}"
-  printf "%s" "$s"
+  printf '%s' "$s"
 }
 
 ## Build a SELECT SQL from DATA_TABLE, DATA_COLUMNS, DATA_FILTERS.

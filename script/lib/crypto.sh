@@ -6,6 +6,7 @@ fi
 set -euo pipefail
 
 ## Decrypt password file using openssl and DB_PASSWORD_KEY_FILE (path to key file).
+## Requires: openssl on PATH and a readable key file.
 ## Usage: plain="$(decrypt_password "/path/to/file.pwd")"
 decrypt_password() {
   local pwd_file="$1"
@@ -27,6 +28,7 @@ decrypt_password() {
 }
 
 ## Encrypt a plaintext password into a .pwd file using openssl and DB_PASSWORD_KEY_FILE.
+## Creates the parent directory for the output file if needed.
 ## Usage: encode_password "plain" "/path/to/file.pwd"
 encode_password() {
   local plain="$1"

@@ -12,6 +12,7 @@ unset _JOB_CFG_DIR
 
 ## List job names.
 ## Discover names from keys like: job.<name>.* in the loaded properties.
+## Order is sorted to keep output stable for tests and CLI usage.
 ## Usage: list_jobs
 list_jobs() {
   local key name
@@ -76,6 +77,9 @@ load_job_config() {
 ## - "col|op|value" (single value; op defaults to '=')
 ## - "col|BETWEEN|from|to" (range)
 ##
+## Notes:
+## - BETWEEN requires both .from and .to; missing values become empty strings.
+## - The resulting array order follows property iteration order and is not stable.
 ## This normalized array is consumed by lib/sql_builder.sh.
 load_job_filters() {
   local job="$1"

@@ -36,7 +36,10 @@ resolve_var() {
 }
 
 ## Load key/value pairs from a .properties file into PROPS.
-## Lines starting with '#' are ignored. Keys and values are trimmed.
+## Lines starting with '#' or ';' are ignored. Keys and values are trimmed.
+## Notes:
+## - This function merges into the existing PROPS map; it does not clear it.
+## - Parsing is "key=value" only. Everything after the first '=' is the value.
 ## Usage: load_properties path/to/env.properties
 load_properties() {
   local file="$1"

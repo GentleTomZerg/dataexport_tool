@@ -23,6 +23,22 @@ _sql_exec_password_from_file() {
   return 0
 }
 
+## Apply raw separators (e.g. "\t", "\n", "\r") to mysql/psql tab output.
+## This keeps the DB client output in TSV, then rewrites to the requested format.
+_sql_exec_apply_separators() {
+  local field_sep_raw="$1"
+  local line_term_raw="$2"
+
+  awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" '
+    BEGIN{
+      OFS=OFS_RAW; ORS=ORS_RAW;
+      gsub(/\\t/,"\t",OFS); gsub(/\\n/,"\n",OFS); gsub(/\\r/,"\r",OFS);
+      gsub(/\\t/,"\t",ORS); gsub(/\\n/,"\n",ORS); gsub(/\\r/,"\r",ORS);
+    }
+    { $1=$1; print }
+  '
+}
+
 _sql_exec_with_mysql() {
   local sql="$1"
   local out_file="$2"
@@ -37,14 +53,14 @@ _sql_exec_with_mysql() {
       -P "$DB_PORT" \
       -u "$DB_USER" \
       "$DB_NAME" \
-      -e "$sql" | awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
+      -e "$sql" | _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   else
     mysql --batch --raw --skip-column-names \
       -h "$DB_HOST" \
       -P "$DB_PORT" \
       -u "$DB_USER" \
       "$DB_NAME" \
-      -e "$sql" | awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
+      -e "$sql" | _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   fi
 }
 
@@ -62,7 +78,7 @@ _sql_exec_with_postgres() {
       -U "$DB_USER" \
       -d "$DB_NAME" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-      awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
+      _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   else
     psql \
       -h "$DB_HOST" \
@@ -70,7 +86,7 @@ _sql_exec_with_postgres() {
       -U "$DB_USER" \
       -d "$DB_NAME" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-      awk -v FS='\t' -v OFS_RAW="$field_sep_raw" -v ORS_RAW="$line_term_raw" 'BEGIN{OFS=OFS_RAW; ORS=ORS_RAW; gsub(/\\\\t/,"\t",OFS); gsub(/\\\\n/,"\n",OFS); gsub(/\\\\r/,"\r",OFS); gsub(/\\\\t/,"\t",ORS); gsub(/\\\\n/,"\n",ORS); gsub(/\\\\r/,"\r",ORS);} { $1=$1; print }' >"$out_file"
+      _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   fi
 }
 
@@ -81,8 +97,6 @@ sql_exec_export() {
   local field_sep_raw="${3:-${DATA_FIELD_SEPARATOR:-\\t}}"
   local line_term_raw="${4:-${DATA_LINE_TERMINATOR:-\\n}}"
   local pwd_file db_password=""
-
-  :
 
   if [[ -z "$out_file" ]]; then
     echo "Missing export output file path" >&2

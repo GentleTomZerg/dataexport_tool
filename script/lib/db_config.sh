@@ -12,7 +12,9 @@ unset _DBCFG_DIR
 
 ## Load DB_* env vars for a named profile.
 ## Required keys: <profile>.DB_HOST, <profile>.DB_PORT, <profile>.DB_NAME, <profile>.DB_USER
-## Optional keys: DB_PASSWORD_DIR (defaults to ./etc/local/pwd)
+## Optional keys:
+## - <profile>.DB_TYPE (defaults to mysql)
+## - DB_PASSWORD_DIR (defaults to ./etc/local/pwd)
 ## Usage: load_db_profile "primary"
 load_db_profile() {
   local profile="$1"

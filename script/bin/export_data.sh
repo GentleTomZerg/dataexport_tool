@@ -17,20 +17,23 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  export_data.sh [--db-props file] [--db-profile name] [--data-props file] [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
+  export_data.sh --db-config file --jobs-config file [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
 
 Environment:
   (none)
 
 Notes:
   - Requires bash and GNU date (uses `date -d` for relative date math).
+  - --db-config and --jobs-config are required.
+  - Each job must define job.<name>.DB_PROFILE.
   - Default behavior prints SQL only. Use --execute to run exports.
 EOF
 }
 
 parse_args() {
-  DB_PROPS="$ROOT_DIR/etc/local/env.properties"
-  DATA_PROPS="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  DB_CONFIG=""
+  JOBS_CONFIG=""
+  ACTIVE_DB_PROFILE=""
   JOBS_ARG=""
   RUN_DATE=""
   SHOW_HELP=0
@@ -38,16 +41,12 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --db-props)
-      DB_PROPS="$2"
+    --db-config)
+      DB_CONFIG="$2"
       shift 2
       ;;
-    --db-profile)
-      DB_PROFILE="$2"
-      shift 2
-      ;;
-    --data-props)
-      DATA_PROPS="$2"
+    --jobs-config)
+      JOBS_CONFIG="$2"
       shift 2
       ;;
     --job)
@@ -80,6 +79,17 @@ parse_args() {
   done
 }
 
+require_args() {
+  local missing=()
+  [[ -z "$DB_CONFIG" ]] && missing+=("--db-config")
+  [[ -z "$JOBS_CONFIG" ]] && missing+=("--jobs-config")
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    echo "Missing required args: ${missing[*]}" >&2
+    usage >&2
+    return 1
+  fi
+}
+
 init_runtime_dates() {
   local run_date="$1"
   if [[ -z "$run_date" ]]; then
@@ -94,18 +104,14 @@ init_runtime_dates() {
   export MONTH_END="$(date -d "$MONTH_START +1 month -1 day" +%F)"
 }
 
-load_db_config() {
+load_db_properties() {
   # Uses lib/db_config.sh which sources properties internally.
-  load_properties "$DB_PROPS"
-  if [[ -z "${DB_PROFILE:-}" ]]; then
-    DB_PROFILE="primary"
-  fi
-  load_db_profile "$DB_PROFILE"
+  load_properties "$DB_CONFIG"
 }
 
 load_job_config_file() {
   # Uses lib/job_config.sh which sources properties internally.
-  load_properties "$DATA_PROPS"
+  load_properties "$JOBS_CONFIG"
 }
 
 resolve_jobs() {
@@ -133,27 +139,32 @@ run_jobs() {
     load_job_filters "$job"
     load_job_splits "$job"
 
-    # Switch DB profile if job overrides it.
-    if [[ -n "$DATA_DB_PROFILE" && "$DATA_DB_PROFILE" != "$DB_PROFILE" ]]; then
-      DB_PROFILE="$DATA_DB_PROFILE"
-      load_db_profile "$DB_PROFILE"
+    if [[ -z "$JOB_DB_PROFILE" ]]; then
+      echo "Missing DB profile for job: $job (set job.${job}.DB_PROFILE)" >&2
+      return 1
     fi
 
+    if [[ "$JOB_DB_PROFILE" != "$ACTIVE_DB_PROFILE" || -z "${DB_HOST:-}" ]]; then
+      ACTIVE_DB_PROFILE="$JOB_DB_PROFILE"
+      load_db_profile "$ACTIVE_DB_PROFILE"
+    fi
+
+    local SQL
     SQL="$(build_select_sql)"
 
     echo "== Job: $job =="
-    echo "DB_PROFILE=$DB_PROFILE"
+    echo "DB_PROFILE=$ACTIVE_DB_PROFILE"
     echo "SQL=$SQL"
-    echo "EXPORT_FILE=${DATA_EXPORT_FILE:-}"
+    echo "EXPORT_FILE=${JOB_EXPORT_FILE:-}"
     echo
 
     if [[ "$EXECUTE" -eq 1 ]]; then
-      if [[ -z "${DATA_EXPORT_FILE:-}" ]]; then
+      if [[ -z "${JOB_EXPORT_FILE:-}" ]]; then
         echo "Missing EXPORT_FILE for job: $job" >&2
         return 1
       fi
-      mkdir -p "$(dirname "$DATA_EXPORT_FILE")"
-      sql_exec_export "$SQL" "$DATA_EXPORT_FILE" "$DATA_FIELD_SEPARATOR" "$DATA_LINE_TERMINATOR"
+      mkdir -p "$(dirname "$JOB_EXPORT_FILE")"
+      sql_exec_export "$SQL" "$JOB_EXPORT_FILE" "$JOB_FIELD_SEPARATOR" "$JOB_LINE_TERMINATOR"
     fi
   done
 }
@@ -163,8 +174,9 @@ main() {
   if [[ "$SHOW_HELP" -eq 1 ]]; then
     return 0
   fi
+  require_args
   init_runtime_dates "$RUN_DATE"
-  load_db_config
+  load_db_properties
   load_job_config_file
   resolve_jobs
   run_jobs

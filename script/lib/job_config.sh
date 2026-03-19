@@ -40,41 +40,41 @@ load_job_config() {
   local job="$1"
   local prefix="job.${job}."
 
-  DATA_JOB="$job"
-  DATA_DB_PROFILE="$(get_prop "${prefix}DB_PROFILE")"
-  DATA_TABLE="$(get_prop "${prefix}TABLE_NAME")"
-  DATA_COLUMNS="$(get_prop "${prefix}COLUMNS")"
-  DATA_EXPORT_FILE="$(get_prop "${prefix}EXPORT_FILE")"
-  DATA_FIELD_SEPARATOR="$(get_prop "${prefix}FIELD_SEPARATOR")"
-  DATA_LINE_TERMINATOR="$(get_prop "${prefix}LINE_TERMINATOR")"
+  JOB_NAME="$job"
+  JOB_DB_PROFILE="$(get_prop "${prefix}DB_PROFILE")"
+  JOB_TABLE="$(get_prop "${prefix}TABLE_NAME")"
+  JOB_COLUMNS="$(get_prop "${prefix}COLUMNS")"
+  JOB_EXPORT_FILE="$(get_prop "${prefix}EXPORT_FILE")"
+  JOB_FIELD_SEPARATOR="$(get_prop "${prefix}FIELD_SEPARATOR")"
+  JOB_LINE_TERMINATOR="$(get_prop "${prefix}LINE_TERMINATOR")"
 
-  [[ -z "$DATA_FIELD_SEPARATOR" ]] && DATA_FIELD_SEPARATOR="\\t"
-  [[ -z "$DATA_LINE_TERMINATOR" ]] && DATA_LINE_TERMINATOR="\\n"
+  [[ -z "$JOB_FIELD_SEPARATOR" ]] && JOB_FIELD_SEPARATOR="\\t"
+  [[ -z "$JOB_LINE_TERMINATOR" ]] && JOB_LINE_TERMINATOR="\\n"
 
-  if [[ -z "$DATA_TABLE" || -z "$DATA_COLUMNS" ]]; then
+  if [[ -z "$JOB_TABLE" || -z "$JOB_COLUMNS" ]]; then
     echo "Missing TABLE_NAME or COLUMNS for job: $job" >&2
     return 1
   fi
 
-  export DATA_JOB DATA_DB_PROFILE DATA_TABLE DATA_COLUMNS DATA_EXPORT_FILE
-  export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
+  export JOB_NAME JOB_DB_PROFILE JOB_TABLE JOB_COLUMNS JOB_EXPORT_FILE
+  export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
 }
 
-## Collect split column definitions for a job into DATA_SPLITS array.
+## Collect split column definitions for a job into JOB_SPLITS array.
 ##
 ## Split properties (export_jobs.properties), Option B:
 ##   job.<name>.SPLIT.<col>=<chunk_size>,<chunks>
 ##
-## Output structure (DATA_SPLITS):
+## Output structure (JOB_SPLITS):
 ## - "col|chunk_size|chunks"
 ##
 ## Notes:
-## - Only columns listed in DATA_COLUMNS are actually split.
+## - Only columns listed in JOB_COLUMNS are actually split.
 ## - Invalid or incomplete split values are ignored.
 load_job_splits() {
   local job="$1"
   local prefix="job.${job}.SPLIT."
-  DATA_SPLITS=()
+  JOB_SPLITS=()
   local key col value chunk_size chunks extra
 
   while IFS= read -r key; do
@@ -90,13 +90,13 @@ load_job_splits() {
     [[ "$chunk_size" -gt 0 ]] || continue
     [[ "$chunks" -gt 0 ]] || continue
 
-    DATA_SPLITS+=("${col}|${chunk_size}|${chunks}")
+    JOB_SPLITS+=("${col}|${chunk_size}|${chunks}")
   done < <(list_props_by_prefix "$prefix")
 
-  export DATA_SPLITS
+  export JOB_SPLITS
 }
 
-## Collect filter definitions for a job into DATA_FILTERS array.
+## Collect filter definitions for a job into JOB_FILTERS array.
 ##
 ## Filter properties (export_jobs.properties):
 ## - Basic:
@@ -109,7 +109,7 @@ load_job_splits() {
 ##   job.<name>.FILTER.<col>.from=2024-01-01
 ##   job.<name>.FILTER.<col>.to=2024-01-31
 ##
-## Output structure (DATA_FILTERS):
+## Output structure (JOB_FILTERS):
 ## - "col|op|value" (single value; op defaults to '=')
 ## - "col|BETWEEN|from|to" (range)
 ##
@@ -120,7 +120,7 @@ load_job_splits() {
 load_job_filters() {
   local job="$1"
   local prefix="job.${job}.FILTER."
-  DATA_FILTERS=()
+  JOB_FILTERS=()
   local key col op value
 
   while IFS= read -r key; do
@@ -129,7 +129,7 @@ load_job_filters() {
       value="$(get_prop "$key")"
       op="$(get_prop "job.${job}.FILTER.${col}.op")"
       [[ -z "$op" ]] && op="="
-      DATA_FILTERS+=("${col}|${op}|${value}")
+      JOB_FILTERS+=("${col}|${op}|${value}")
     elif [[ "$key" =~ ^job\.${job}\.FILTER\.([^\.]+)\.from$ ]]; then
       col="${BASH_REMATCH[1]}"
       op="$(get_prop "job.${job}.FILTER.${col}.op")"
@@ -137,14 +137,14 @@ load_job_filters() {
       local from to
       from="$(get_prop "job.${job}.FILTER.${col}.from")"
       to="$(get_prop "job.${job}.FILTER.${col}.to")"
-      DATA_FILTERS+=("${col}|BETWEEN|${from}|${to}")
+      JOB_FILTERS+=("${col}|BETWEEN|${from}|${to}")
     elif [[ "$key" =~ ^job\.${job}\.FILTER\.([^\.]+)$ ]]; then
       col="${BASH_REMATCH[1]}"
       value="$(get_prop "$key")"
       op="="
-      DATA_FILTERS+=("${col}|${op}|${value}")
+      JOB_FILTERS+=("${col}|${op}|${value}")
     fi
   done < <(list_props_by_prefix "$prefix")
 
-  export DATA_FILTERS
+  export JOB_FILTERS
 }

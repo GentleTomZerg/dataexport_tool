@@ -82,9 +82,9 @@ export DB_TYPE DB_PASSWORD_FILE
 printf 'dummy' >"$DB_PASSWORD_FILE"
 
 out_file="$TMP_DIR/mysql.out"
-DATA_FIELD_SEPARATOR="|"
-DATA_LINE_TERMINATOR="\\n"
-export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
+JOB_FIELD_SEPARATOR="|"
+JOB_LINE_TERMINATOR="\\n"
+export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
 
 sql_exec_export "SELECT 1" "$out_file"
 printf '1|Alice\n2|Bob\n' >"$TMP_DIR/expected_mysql.out"
@@ -99,9 +99,9 @@ export DB_TYPE DB_PORT DB_PASSWORD_FILE
 printf 'dummy' >"$DB_PASSWORD_FILE"
 
 out_file="$TMP_DIR/psql.out"
-DATA_FIELD_SEPARATOR=","
-DATA_LINE_TERMINATOR="\\r\\n"
-export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
+JOB_FIELD_SEPARATOR=","
+JOB_LINE_TERMINATOR="\\r\\n"
+export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
 
 sql_exec_export "SELECT 1" "$out_file"
 printf '1,Alice\r\n2,Bob\r\n' >"$TMP_DIR/expected_psql.out"
@@ -115,9 +115,9 @@ export DB_TYPE DB_PASSWORD_FILE
 rm -f "$MYSQL_LOG.pwd"
 
 out_file="$TMP_DIR/mysql.nopwd.out"
-DATA_FIELD_SEPARATOR=","
-DATA_LINE_TERMINATOR="\\n"
-export DATA_FIELD_SEPARATOR DATA_LINE_TERMINATOR
+JOB_FIELD_SEPARATOR=","
+JOB_LINE_TERMINATOR="\\n"
+export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
 
 sql_exec_export "SELECT 1" "$out_file"
 assert_true "[[ ! -f '$MYSQL_LOG.pwd' || ! -s '$MYSQL_LOG.pwd' ]]" "mysql no password used"

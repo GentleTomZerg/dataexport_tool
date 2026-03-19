@@ -93,17 +93,17 @@ assert_true "[[ ${#jobs[@]} -eq 5 ]]" "list_jobs count"
 
 # Load users job.
 load_job_config "users"
-assert_eq "users" "$DATA_JOB" "job name"
-assert_eq "primary" "$DATA_DB_PROFILE" "db profile"
-assert_eq "users" "$DATA_TABLE" "table name"
-assert_eq "id,name,email" "$DATA_COLUMNS" "columns"
-assert_eq "./exports/users_2026-03-17.csv" "$DATA_EXPORT_FILE" "export file expansion"
-assert_eq "|" "$DATA_FIELD_SEPARATOR" "field separator"
-assert_eq "\\r\\n" "$DATA_LINE_TERMINATOR" "line terminator"
+assert_eq "users" "$JOB_NAME" "job name"
+assert_eq "primary" "$JOB_DB_PROFILE" "db profile"
+assert_eq "users" "$JOB_TABLE" "table name"
+assert_eq "id,name,email" "$JOB_COLUMNS" "columns"
+assert_eq "./exports/users_2026-03-17.csv" "$JOB_EXPORT_FILE" "export file expansion"
+assert_eq "|" "$JOB_FIELD_SEPARATOR" "field separator"
+assert_eq "\\r\\n" "$JOB_LINE_TERMINATOR" "line terminator"
 
 # Filters: collect and compare as a set because order is not guaranteed.
 load_job_filters "users"
-mapfile -t filters < <(printf '%s\n' "${DATA_FILTERS[@]}" | sort)
+mapfile -t filters < <(printf '%s\n' "${JOB_FILTERS[@]}" | sort)
 mapfile -t expected < <(cat <<'EXPECT' | sort
 name|LIKE|%bob%
 status|=|active
@@ -114,7 +114,7 @@ assert_eq "${expected[*]}" "${filters[*]}" "users filters set"
 
 # Split columns.
 load_job_splits "users"
-mapfile -t splits < <(printf '%s\n' "${DATA_SPLITS[@]}" | sort)
+mapfile -t splits < <(printf '%s\n' "${JOB_SPLITS[@]}" | sort)
 mapfile -t expected_splits < <(cat <<'EXPECT' | sort
 content|4000|3
 notes|2000|2
@@ -124,12 +124,12 @@ assert_eq "${expected_splits[*]}" "${splits[*]}" "users split set"
 
 # Orders job: no DB_PROFILE/EXPORT_FILE, single filter with op.
 load_job_config "orders"
-assert_eq "" "$DATA_DB_PROFILE" "orders db profile empty"
-assert_eq "" "$DATA_EXPORT_FILE" "orders export file empty"
-assert_eq "\\t" "$DATA_FIELD_SEPARATOR" "orders field separator default"
-assert_eq "\\n" "$DATA_LINE_TERMINATOR" "orders line terminator default"
+assert_eq "" "$JOB_DB_PROFILE" "orders db profile empty"
+assert_eq "" "$JOB_EXPORT_FILE" "orders export file empty"
+assert_eq "\\t" "$JOB_FIELD_SEPARATOR" "orders field separator default"
+assert_eq "\\n" "$JOB_LINE_TERMINATOR" "orders line terminator default"
 load_job_filters "orders"
-assert_eq "total|>=|100" "${DATA_FILTERS[0]}" "orders filter"
+assert_eq "total|>=|100" "${JOB_FILTERS[0]}" "orders filter"
 
 # Broken job should fail.
 assert_fail "broken job should fail" load_job_config "broken"

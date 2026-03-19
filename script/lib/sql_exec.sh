@@ -94,8 +94,8 @@ sql_exec_export() {
   local sql="$1"
   local out_file="$2"
   local db_type="${DB_TYPE:-mysql}"
-  local field_sep_raw="${3:-${DATA_FIELD_SEPARATOR:-\\t}}"
-  local line_term_raw="${4:-${DATA_LINE_TERMINATOR:-\\n}}"
+  local field_sep_raw="${3:-${JOB_FIELD_SEPARATOR:-\\t}}"
+  local line_term_raw="${4:-${JOB_LINE_TERMINATOR:-\\n}}"
   local pwd_file db_password=""
 
   if [[ -z "$out_file" ]]; then

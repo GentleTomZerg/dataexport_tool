@@ -80,7 +80,7 @@ job.monthly_events.FILTER.created_at.to=${MONTH_END}
 PROPS
 
 # 1) Run all jobs with a fixed date.
-output_all="$($ROOT_DIR/bin/export_data.sh --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --date 2026-03-17)"
+output_all="$($ROOT_DIR/bin/export_data.sh --db-config "$DB_PROPS" --jobs-config "$DATA_PROPS" --date 2026-03-17)"
 assert_contains "== Job: users ==" "$output_all" "all jobs contains users"
 assert_contains "== Job: orders ==" "$output_all" "all jobs contains orders"
 assert_contains "== Job: daily_events ==" "$output_all" "all jobs contains daily_events"
@@ -97,7 +97,7 @@ assert_contains "SQL=SELECT id,type,created_at FROM events WHERE created_at BETW
 assert_contains "SQL=SELECT id,type,created_at FROM events WHERE created_at BETWEEN '2026-03-01' AND '2026-03-31'" "$output_all" "monthly events SQL"
 
 # 2) Run a specific job.
-output_one="$($ROOT_DIR/bin/export_data.sh --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --job users --date 2026-03-17)"
+output_one="$($ROOT_DIR/bin/export_data.sh --db-config "$DB_PROPS" --jobs-config "$DATA_PROPS" --job users --date 2026-03-17)"
 assert_contains "== Job: users ==" "$output_one" "single job users"
 if [[ "$output_one" == *"== Job: orders =="* ]]; then
   echo "FAIL: single job should not include orders" >&2
@@ -108,7 +108,7 @@ fi
 cat > "$DATA_PROPS" <<'PROPS'
 # empty
 PROPS
-if $ROOT_DIR/bin/export_data.sh --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --date 2026-03-17 >/dev/null 2>&1; then
+if $ROOT_DIR/bin/export_data.sh --db-config "$DB_PROPS" --jobs-config "$DATA_PROPS" --date 2026-03-17 >/dev/null 2>&1; then
   echo "FAIL: expected missing jobs to fail" >&2
   exit 1
 fi

@@ -19,42 +19,42 @@ assert_eq() {
 }
 
 # Base data used by all tests.
-DATA_TABLE="users"
-DATA_COLUMNS="id,name,email"
+JOB_TABLE="users"
+JOB_COLUMNS="id,name,email"
 
 # 1) No filters.
-DATA_FILTERS=()
+JOB_FILTERS=()
 assert_eq "SELECT id,name,email FROM users" "$(build_select_sql)" "no filters"
 
 # 2) Single equality.
-DATA_FILTERS=("status|=|active")
+JOB_FILTERS=("status|=|active")
 assert_eq "SELECT id,name,email FROM users WHERE status = 'active'" "$(build_select_sql)" "single equals"
 
 # 3) Multiple filters ANDed.
-DATA_FILTERS=("status|=|active" "age|>=|18")
+JOB_FILTERS=("status|=|active" "age|>=|18")
 assert_eq "SELECT id,name,email FROM users WHERE status = 'active' AND age >= '18'" "$(build_select_sql)" "multiple filters"
 
 # 4) LIKE operator.
-DATA_FILTERS=("name|LIKE|%bob%")
+JOB_FILTERS=("name|LIKE|%bob%")
 assert_eq "SELECT id,name,email FROM users WHERE name LIKE '%bob%'" "$(build_select_sql)" "like operator"
 
 # 5) BETWEEN range.
-DATA_FILTERS=("created_at|BETWEEN|2024-01-01|2024-01-31")
+JOB_FILTERS=("created_at|BETWEEN|2024-01-01|2024-01-31")
 assert_eq "SELECT id,name,email FROM users WHERE created_at BETWEEN '2024-01-01' AND '2024-01-31'" "$(build_select_sql)" "between operator"
 
 # 6) Single-quote escaping.
-DATA_FILTERS=("note|=|O'Brien")
+JOB_FILTERS=("note|=|O'Brien")
 assert_eq "SELECT id,name,email FROM users WHERE note = 'O''Brien'" "$(build_select_sql)" "escape single quote"
 
 # 7) Mixed operators with BETWEEN.
-DATA_FILTERS=("status|=|active" "created_at|BETWEEN|2024-01-01|2024-01-31" "score|>|10")
+JOB_FILTERS=("status|=|active" "created_at|BETWEEN|2024-01-01|2024-01-31" "score|>|10")
 assert_eq "SELECT id,name,email FROM users WHERE status = 'active' AND created_at BETWEEN '2024-01-01' AND '2024-01-31' AND score > '10'" "$(build_select_sql)" "mixed operators"
 
 # 8) Split columns (mysql only): remove original and add chunked pieces.
 DB_TYPE="mysql"
-DATA_COLUMNS="id,content,email"
-DATA_FILTERS=()
-DATA_SPLITS=("content|4|3")
+JOB_COLUMNS="id,content,email"
+JOB_FILTERS=()
+JOB_SPLITS=("content|4|3")
 assert_eq "SELECT id,SUBSTRING(content, 1, 4) AS content_part1,SUBSTRING(content, 5, 4) AS content_part2,SUBSTRING(content, 9, 4) AS content_part3,email FROM users" "$(build_select_sql)" "split columns"
 
 echo "OK: sql_builder_test.sh"

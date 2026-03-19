@@ -70,7 +70,7 @@ PROPS
 sed -i "s#__OUT_FILE__#$OUT_FILE#" "$DATA_PROPS"
 
 PATH="$FAKE_BIN:$PATH" \
-  "$ROOT_DIR/bin/export_data.sh" --db-props "$DB_PROPS" --data-props "$DATA_PROPS" --job users --date 2026-03-17 --execute >/dev/null
+  "$ROOT_DIR/bin/export_data.sh" --db-config "$DB_PROPS" --jobs-config "$DATA_PROPS" --job users --date 2026-03-17 --execute >/dev/null
 
 assert_true "[[ -f '$OUT_FILE' ]]" "export output file exists"
 printf '1|Alice\n2|Bob\n' >"$TMP_DIR/expected_export.out"

@@ -44,6 +44,8 @@
   - Expands runtime date variables.
   - Builds SQL and prints it per job.
   - `--execute` runs `lib/sql_exec.sh` and writes export files.
+  - Requires `--db-config` and `--jobs-config`.
+  - Each job must set `job.<name>.DB_PROFILE`.
 
 ## Config Files
 
@@ -104,19 +106,19 @@ Set by `bin/export_data.sh`:
 Print SQL for all jobs:
 
 ```
-./bin/export_data.sh
+./bin/export_data.sh --db-config ./etc/local/env.properties --jobs-config ./etc/local/config/export_jobs.properties
 ```
 
 Print SQL for specific jobs:
 
 ```
-./bin/export_data.sh --jobs users,orders --date 2026-03-17
+./bin/export_data.sh --db-config ./etc/local/env.properties --jobs-config ./etc/local/config/export_jobs.properties --jobs users,orders --date 2026-03-17
 ```
 
 Execute exports for specific jobs:
 
 ```
-./bin/export_data.sh --jobs users,orders --date 2026-03-17 --execute
+./bin/export_data.sh --db-config ./etc/local/env.properties --jobs-config ./etc/local/config/export_jobs.properties --jobs users,orders --date 2026-03-17 --execute
 ```
 
 ## Passwords

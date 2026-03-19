@@ -33,10 +33,10 @@ _sql_build_select_columns() {
     columns+=("$col")
   done
 
-  if [[ ${DATA_SPLITS+set} && "$db_type" == "mysql" ]]; then
+  if [[ ${JOB_SPLITS+set} && "$db_type" == "mysql" ]]; then
     declare -A split_size split_chunks
     local split_item split_col size chunks
-    for split_item in "${DATA_SPLITS[@]}"; do
+    for split_item in "${JOB_SPLITS[@]}"; do
       IFS='|' read -r split_col size chunks <<<"$split_item"
       split_size["$split_col"]="$size"
       split_chunks["$split_col"]="$chunks"
@@ -63,9 +63,9 @@ _sql_build_select_columns() {
   printf '%s' "$(IFS=,; echo "${columns[*]}")"
 }
 
-## Build a SELECT SQL from DATA_TABLE, DATA_COLUMNS, DATA_FILTERS.
+## Build a SELECT SQL from JOB_TABLE, JOB_COLUMNS, JOB_FILTERS.
 ##
-## Expected DATA_FILTERS format (built by lib/job_config.sh):
+## Expected JOB_FILTERS format (built by lib/job_config.sh):
 ##   Each entry is a pipe-separated string:
 ##     - "col|op|value"               (single value)
 ##     - "col|BETWEEN|from|to"        (range)
@@ -81,13 +81,13 @@ _sql_build_select_columns() {
 ## Usage: sql="$(build_select_sql)"
 build_select_sql() {
   local select_cols
-  select_cols="$(_sql_build_select_columns "$DATA_COLUMNS")"
-  local sql="SELECT ${select_cols} FROM ${DATA_TABLE}"
+  select_cols="$(_sql_build_select_columns "$JOB_COLUMNS")"
+  local sql="SELECT ${select_cols} FROM ${JOB_TABLE}"
   local where_parts=()
   local item col op v1 v2 esc
 
-  if [[ ${DATA_FILTERS+set} ]]; then
-    for item in "${DATA_FILTERS[@]}"; do
+  if [[ ${JOB_FILTERS+set} ]]; then
+    for item in "${JOB_FILTERS[@]}"; do
       IFS='|' read -r col op v1 v2 <<<"$item"
       if [[ "${op^^}" == "BETWEEN" ]]; then
         # Format: col|BETWEEN|from|to

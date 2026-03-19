@@ -154,8 +154,23 @@ run_jobs() {
 
     echo "== Job: $job =="
     echo "DB_PROFILE=$ACTIVE_DB_PROFILE"
+    echo "DB_HOST=$DB_HOST"
+    echo "DB_PORT=$DB_PORT"
+    echo "DB_NAME=$DB_NAME"
+    echo "DB_USER=$DB_USER"
+    echo "DB_TYPE=$DB_TYPE"
+    echo "DB_CONFIG=$DB_CONFIG"
+    echo "JOBS_CONFIG=$JOBS_CONFIG"
+    echo "TABLE=$JOB_TABLE"
     echo "SQL=$SQL"
     echo "EXPORT_FILE=${JOB_EXPORT_FILE:-}"
+    echo "FIELD_SEPARATOR=$JOB_FIELD_SEPARATOR"
+    echo "LINE_TERMINATOR=$JOB_LINE_TERMINATOR"
+    echo "EXPORT_DATE=$EXPORT_DATE"
+    echo "YESTERDAY=$YESTERDAY"
+    echo "EXPORT_MONTH=$EXPORT_MONTH"
+    echo "MONTH_START=$MONTH_START"
+    echo "MONTH_END=$MONTH_END"
     echo
 
     if [[ "$EXECUTE" -eq 1 ]]; then

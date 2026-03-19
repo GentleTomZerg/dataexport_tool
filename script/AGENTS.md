@@ -30,6 +30,9 @@
   - Loads a single job config and its filters from `export_jobs.properties`.
   - Loads optional field/line separators (defaults: `\t`, `\n`).
   - Loads optional split-column rules (Option B: `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`).
+  - Loads optional post-export settings for compression and transfer.
+- `lib/post_export.sh`
+  - Optional post-export processing: compress and/or move/copy artifacts.
 - `lib/sql_builder.sh`
   - Builds a `SELECT` with filters, supports `BETWEEN`.
   - For MySQL only, can expand TEXT columns into chunked `SUBSTRING` pieces and omit the original column.
@@ -71,6 +74,34 @@ job.users.FIELD_SEPARATOR=|
 job.users.LINE_TERMINATOR=\n
 job.users.FILTER.status=active
 ```
+
+### DB Config Format
+
+Required per profile:
+- `<profile>.DB_HOST`
+- `<profile>.DB_PORT` (numeric)
+- `<profile>.DB_NAME`
+- `<profile>.DB_USER`
+
+Optional:
+- `<profile>.DB_TYPE` (default: `mysql`; allowed: `mysql`, `postgres`)
+- `DB_PASSWORD_DIR` (default: `./etc/local/pwd`)
+
+### Job Config Format
+
+Required per job:
+- `job.<name>.DB_PROFILE`
+- `job.<name>.TABLE_NAME`
+- `job.<name>.COLUMNS` (comma-separated, no empty entries)
+
+Optional:
+- `job.<name>.EXPORT_FILE`
+- `job.<name>.FIELD_SEPARATOR` (default: `\t`)
+- `job.<name>.LINE_TERMINATOR` (default: `\n`)
+- `job.<name>.FILTER.*`
+- `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`
+- `job.<name>.COMPRESS.*`
+- `job.<name>.TRANSFER.*`
 
 ## Filters
 
@@ -121,6 +152,22 @@ Execute exports for specific jobs:
 ./bin/export_data.sh --db-config ./etc/local/env.properties --jobs-config ./etc/local/config/export_jobs.properties --jobs users,orders --date 2026-03-17 --execute
 ```
 
+## Exit Codes
+
+- Exit `1` (global failure):
+  - Missing required CLI flags (`--db-config`, `--jobs-config`)
+  - DB config file not found or unreadable
+  - Jobs config file not found or unreadable
+  - No jobs resolved
+  - Runtime date computation failure
+- Exit `0` (job failures do not stop the run):
+  - Job validation failure
+  - Missing `EXPORT_FILE` when `--execute`
+  - SQL execution failure
+  - Compression failure
+  - Transfer failure
+  - DB profile invalid for a specific job
+
 ## Passwords
 
 - Password files are named `{DB_HOST}_{DB_PORT}_{DB_USER}.pwd` under `DB_PASSWORD_DIR`.
@@ -159,3 +206,26 @@ Behavior:
   - `SUBSTRING(content, 8001, 4000) AS content_part3`
 - The original `content` column is not selected.
 - If the column is longer than the configured chunks, the rest is dropped.
+
+## Post-Export: Compression and Transfer
+
+Optional per-job settings:
+
+```
+job.<name>.COMPRESS.ENABLED=true|false
+job.<name>.COMPRESS.MODE=gz|tar|tar.gz|tgz
+job.<name>.COMPRESS.OVERWRITE=true|false
+job.<name>.COMPRESS.REMOVE_ORIGINAL=true|false
+
+job.<name>.TRANSFER.ENABLED=true|false
+job.<name>.TRANSFER.DIR=/path/to/transfer
+job.<name>.TRANSFER.MODE=move|copy
+job.<name>.TRANSFER.OVERWRITE=true|false
+job.<name>.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
+```
+
+Behavior:
+- Compression happens before transfer.
+- If compression is enabled, the artifact becomes the compressed output.
+- Transfer moves/copies the final artifact into `TRANSFER.DIR`.
+- Rename supports `${JOB_NAME}`, `${EXPORT_DATE}`, `${BASENAME}`, `${EXT}`.

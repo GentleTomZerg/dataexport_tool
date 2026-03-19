@@ -11,11 +11,11 @@ Notes:
   - export_data.sh is always executed with bash.
   - The single argument maps to export_data.sh --date.
   - Update DB_CONFIG and JOBS_CONFIG below if your paths differ.
+  - Set FAKE_MYSQL=1 to use a stub mysql client for testing.
 
 export_data.sh flags:
-  --db-props <file>
-  --db-profile <name>
-  --data-props <file>
+  --db-config <file>
+  --jobs-config <file>
   --job <name>
   --jobs <a,b>
   --date <YYYY-MM-DD>
@@ -37,13 +37,31 @@ main() {
   ROOT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
   # Default locations (edit here if you keep configs elsewhere).
-  DB_CONFIG="$ROOT_DIR/etc/local/env.properties"
-  JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  # DB_CONFIG="$ROOT_DIR/etc/local/env.properties"
+  # JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  DB_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
+  JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
+
+  FAKE_MYSQL=1
+
+  if [ "${FAKE_MYSQL:-0}" = "1" ]; then
+    FAKE_BIN=$(mktemp -d)
+    trap 'rm -rf "$FAKE_BIN"' EXIT
+    cat >"$FAKE_BIN/mysql" <<'FAKE'
+#!/bin/sh
+set -eu
+# Emit tab-separated rows (no header), similar to mysql --batch --raw --skip-column-names.
+printf '1\tAlice\n2\tBob\n'
+FAKE
+    chmod +x "$FAKE_BIN/mysql"
+    PATH="$FAKE_BIN:$PATH"
+  fi
 
   exec bash "$ROOT_DIR/bin/export_data.sh" \
     --db-config "$DB_CONFIG" \
     --jobs-config "$JOBS_CONFIG" \
-    --date "$batch_date"
+    --date "$batch_date" \
+    --execute
 }
 
 main "$@"

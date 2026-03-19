@@ -34,7 +34,8 @@ list_jobs() {
 ## Required keys: job.<name>.TABLE_NAME, job.<name>.COLUMNS
 ## Optional keys: job.<name>.DB_PROFILE, job.<name>.EXPORT_FILE,
 ##                job.<name>.FIELD_SEPARATOR, job.<name>.LINE_TERMINATOR,
-##                job.<name>.FILTER.*, job.<name>.SPLIT.<col>
+##                job.<name>.FILTER.*, job.<name>.SPLIT.<col>,
+##                job.<name>.TRANSFER.*, job.<name>.COMPRESS.*
 ## Usage: load_job_config "job1"
 load_job_config() {
   local job="$1"
@@ -48,8 +49,12 @@ load_job_config() {
   JOB_FIELD_SEPARATOR="$(get_prop "${prefix}FIELD_SEPARATOR")"
   JOB_LINE_TERMINATOR="$(get_prop "${prefix}LINE_TERMINATOR")"
 
-  [[ -z "$JOB_FIELD_SEPARATOR" ]] && JOB_FIELD_SEPARATOR="\\t"
-  [[ -z "$JOB_LINE_TERMINATOR" ]] && JOB_LINE_TERMINATOR="\\n"
+  if [[ -z "$JOB_FIELD_SEPARATOR" ]]; then
+    JOB_FIELD_SEPARATOR="\\t"
+  fi
+  if [[ -z "$JOB_LINE_TERMINATOR" ]]; then
+    JOB_LINE_TERMINATOR="\\n"
+  fi
 
   if [[ -z "$JOB_TABLE" || -z "$JOB_COLUMNS" ]]; then
     echo "Missing TABLE_NAME or COLUMNS for job: $job" >&2
@@ -85,6 +90,127 @@ validate_job_config() {
       return 1
     fi
   done
+}
+
+## Load transfer settings into JOB_TRANSFER_* variables.
+## Defaults:
+## - ENABLED=false
+## - MODE=move
+## - OVERWRITE=false
+## - RENAME=""
+load_job_transfer() {
+  local job="$1"
+  local prefix="job.${job}.TRANSFER."
+
+  JOB_TRANSFER_ENABLED="$(get_prop "${prefix}ENABLED")"
+  JOB_TRANSFER_DIR="$(get_prop "${prefix}DIR")"
+  JOB_TRANSFER_MODE="$(get_prop "${prefix}MODE")"
+  JOB_TRANSFER_OVERWRITE="$(get_prop "${prefix}OVERWRITE")"
+  JOB_TRANSFER_RENAME="$(get_prop "${prefix}RENAME")"
+
+  JOB_TRANSFER_ENABLED="${JOB_TRANSFER_ENABLED,,}"
+  JOB_TRANSFER_MODE="${JOB_TRANSFER_MODE,,}"
+  JOB_TRANSFER_OVERWRITE="${JOB_TRANSFER_OVERWRITE,,}"
+
+  if [[ -z "$JOB_TRANSFER_ENABLED" ]]; then
+    JOB_TRANSFER_ENABLED="false"
+  fi
+  if [[ -z "$JOB_TRANSFER_MODE" ]]; then
+    JOB_TRANSFER_MODE="move"
+  fi
+  if [[ -z "$JOB_TRANSFER_OVERWRITE" ]]; then
+    JOB_TRANSFER_OVERWRITE="false"
+  fi
+}
+
+validate_job_transfer() {
+  local job="$1"
+  if [[ "$JOB_TRANSFER_ENABLED" == "true" ]]; then
+    if [[ -z "$JOB_TRANSFER_DIR" ]]; then
+      echo "Missing TRANSFER.DIR for job: $job" >&2
+      return 1
+    fi
+    case "$JOB_TRANSFER_MODE" in
+      move|copy)
+        ;;
+      *)
+        echo "Invalid TRANSFER.MODE for job: $job ($JOB_TRANSFER_MODE)" >&2
+        return 1
+        ;;
+    esac
+    case "$JOB_TRANSFER_OVERWRITE" in
+      true|false)
+        ;;
+      *)
+        echo "Invalid TRANSFER.OVERWRITE for job: $job ($JOB_TRANSFER_OVERWRITE)" >&2
+        return 1
+        ;;
+    esac
+  fi
+}
+
+## Load compression settings into JOB_COMPRESS_* variables.
+## Defaults:
+## - ENABLED=false
+## - MODE=tar.gz
+## - OVERWRITE=false
+## - REMOVE_ORIGINAL=false
+load_job_compress() {
+  local job="$1"
+  local prefix="job.${job}.COMPRESS."
+
+  JOB_COMPRESS_ENABLED="$(get_prop "${prefix}ENABLED")"
+  JOB_COMPRESS_MODE="$(get_prop "${prefix}MODE")"
+  JOB_COMPRESS_OVERWRITE="$(get_prop "${prefix}OVERWRITE")"
+  JOB_COMPRESS_REMOVE_ORIGINAL="$(get_prop "${prefix}REMOVE_ORIGINAL")"
+
+  JOB_COMPRESS_ENABLED="${JOB_COMPRESS_ENABLED,,}"
+  JOB_COMPRESS_MODE="${JOB_COMPRESS_MODE,,}"
+  JOB_COMPRESS_OVERWRITE="${JOB_COMPRESS_OVERWRITE,,}"
+  JOB_COMPRESS_REMOVE_ORIGINAL="${JOB_COMPRESS_REMOVE_ORIGINAL,,}"
+
+  if [[ -z "$JOB_COMPRESS_ENABLED" ]]; then
+    JOB_COMPRESS_ENABLED="false"
+  fi
+  if [[ -z "$JOB_COMPRESS_MODE" ]]; then
+    JOB_COMPRESS_MODE="tar.gz"
+  fi
+  if [[ -z "$JOB_COMPRESS_OVERWRITE" ]]; then
+    JOB_COMPRESS_OVERWRITE="false"
+  fi
+  if [[ -z "$JOB_COMPRESS_REMOVE_ORIGINAL" ]]; then
+    JOB_COMPRESS_REMOVE_ORIGINAL="false"
+  fi
+}
+
+validate_job_compress() {
+  local job="$1"
+  if [[ "$JOB_COMPRESS_ENABLED" == "true" ]]; then
+    case "$JOB_COMPRESS_MODE" in
+      gz|tar|tar.gz|tgz)
+        ;;
+      *)
+        echo "Invalid COMPRESS.MODE for job: $job ($JOB_COMPRESS_MODE)" >&2
+        return 1
+        ;;
+    esac
+    case "$JOB_COMPRESS_OVERWRITE" in
+      true|false)
+        ;;
+      *)
+        echo "Invalid COMPRESS.OVERWRITE for job: $job ($JOB_COMPRESS_OVERWRITE)" >&2
+        return 1
+        ;;
+    esac
+    case "$JOB_COMPRESS_REMOVE_ORIGINAL" in
+      true|false)
+        ;;
+      *)
+        echo "Invalid COMPRESS.REMOVE_ORIGINAL for job: $job ($JOB_COMPRESS_REMOVE_ORIGINAL)" >&2
+        return 1
+        ;;
+    esac
+  fi
 }
 
 ## Collect split column definitions for a job into JOB_SPLITS_RAW array.

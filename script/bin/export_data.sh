@@ -11,6 +11,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/lib/db_config.sh"
 source "$ROOT_DIR/lib/crypto.sh"
 source "$ROOT_DIR/lib/job_config.sh"
+source "$ROOT_DIR/lib/post_export.sh"
 source "$ROOT_DIR/lib/sql_builder.sh"
 source "$ROOT_DIR/lib/sql_exec.sh"
 
@@ -124,6 +125,10 @@ validate_job_bundle() {
   validate_job_filters "$job"
   load_job_splits "$job"
   validate_job_splits "$job"
+  load_job_transfer "$job"
+  validate_job_transfer "$job"
+  load_job_compress "$job"
+  validate_job_compress "$job"
 }
 
 resolve_jobs() {
@@ -141,22 +146,33 @@ resolve_jobs() {
 
 run_jobs() {
   local job
+  local failed_jobs=()
   for job in "${JOBS_LIST[@]}"; do
     job="${job##+([[:space:]])}"
     job="${job%%+([[:space:]])}"
     [[ -z "$job" ]] && continue
 
     # Load and validate per-job config, filters, and split rules.
-    validate_job_bundle "$job"
+    if ! validate_job_bundle "$job"; then
+      echo "JOB_FAILED: $job (validation failed)" >&2
+      failed_jobs+=("$job")
+      continue
+    fi
 
     if [[ -z "$JOB_DB_PROFILE" ]]; then
       echo "Missing DB profile for job: $job (set job.${job}.DB_PROFILE)" >&2
-      return 1
+      echo "JOB_FAILED: $job (missing DB_PROFILE)" >&2
+      failed_jobs+=("$job")
+      continue
     fi
 
     if [[ "$JOB_DB_PROFILE" != "$ACTIVE_DB_PROFILE" || -z "${DB_HOST:-}" ]]; then
       ACTIVE_DB_PROFILE="$JOB_DB_PROFILE"
-      load_db_profile "$ACTIVE_DB_PROFILE"
+      if ! load_db_profile "$ACTIVE_DB_PROFILE"; then
+        echo "JOB_FAILED: $job (invalid DB profile: $ACTIVE_DB_PROFILE)" >&2
+        failed_jobs+=("$job")
+        continue
+      fi
     fi
 
     local SQL
@@ -186,12 +202,43 @@ run_jobs() {
     if [[ "$EXECUTE" -eq 1 ]]; then
       if [[ -z "${JOB_EXPORT_FILE:-}" ]]; then
         echo "Missing EXPORT_FILE for job: $job" >&2
-        return 1
+        echo "JOB_FAILED: $job (missing EXPORT_FILE)" >&2
+        failed_jobs+=("$job")
+        continue
       fi
-      mkdir -p "$(dirname "$JOB_EXPORT_FILE")"
-      sql_exec_export "$SQL" "$JOB_EXPORT_FILE" "$JOB_FIELD_SEPARATOR" "$JOB_LINE_TERMINATOR"
+      if ! mkdir -p "$(dirname "$JOB_EXPORT_FILE")"; then
+        echo "JOB_FAILED: $job (failed to create export dir)" >&2
+        failed_jobs+=("$job")
+        continue
+      fi
+      if ! sql_exec_export "$SQL" "$JOB_EXPORT_FILE" "$JOB_FIELD_SEPARATOR" "$JOB_LINE_TERMINATOR"; then
+        echo "JOB_FAILED: $job (sql_exec_export failed)" >&2
+        failed_jobs+=("$job")
+        continue
+      fi
+
+      local artifact_path="$JOB_EXPORT_FILE"
+      if [[ "$JOB_COMPRESS_ENABLED" == "true" ]]; then
+        if ! artifact_path="$(compress_file "$artifact_path" "$JOB_COMPRESS_MODE" "$JOB_COMPRESS_OVERWRITE" "$JOB_COMPRESS_REMOVE_ORIGINAL")"; then
+          echo "JOB_FAILED: $job (compress failed)" >&2
+          failed_jobs+=("$job")
+          continue
+        fi
+      fi
+      if [[ "$JOB_TRANSFER_ENABLED" == "true" ]]; then
+        if ! artifact_path="$(transfer_file "$artifact_path" "$JOB_TRANSFER_DIR" "$JOB_TRANSFER_MODE" "$JOB_TRANSFER_OVERWRITE" "$JOB_TRANSFER_RENAME")"; then
+          echo "JOB_FAILED: $job (transfer failed)" >&2
+          failed_jobs+=("$job")
+          continue
+        fi
+      fi
     fi
   done
+
+  if [[ "${#failed_jobs[@]}" -gt 0 ]]; then
+    echo "FAILED_JOBS=${failed_jobs[*]}" >&2
+    return 0
+  fi
 }
 
 main() {

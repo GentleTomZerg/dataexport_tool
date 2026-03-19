@@ -44,7 +44,7 @@ PROPS_FILE="$TMP_DIR/jobs.properties"
 cat > "$PROPS_FILE" <<'PROPS'
 job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
-job.users.COLUMNS=id,name,email
+job.users.COLUMNS=id,name,email,notes,content
 job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
 job.users.FIELD_SEPARATOR=|
 job.users.LINE_TERMINATOR=\r\n
@@ -96,7 +96,7 @@ load_job_config "users"
 assert_eq "users" "$JOB_NAME" "job name"
 assert_eq "primary" "$JOB_DB_PROFILE" "db profile"
 assert_eq "users" "$JOB_TABLE" "table name"
-assert_eq "id,name,email" "$JOB_COLUMNS" "columns"
+assert_eq "id,name,email,notes,content" "$JOB_COLUMNS" "columns"
 assert_eq "./exports/users_2026-03-17.csv" "$JOB_EXPORT_FILE" "export file expansion"
 assert_eq "|" "$JOB_FIELD_SEPARATOR" "field separator"
 assert_eq "\\r\\n" "$JOB_LINE_TERMINATOR" "line terminator"
@@ -114,6 +114,7 @@ assert_eq "${expected[*]}" "${filters[*]}" "users filters set"
 
 # Split columns.
 load_job_splits "users"
+validate_job_splits "users"
 mapfile -t splits < <(printf '%s\n' "${JOB_SPLITS[@]}" | sort)
 mapfile -t expected_splits < <(cat <<'EXPECT' | sort
 content|4000|3

@@ -60,21 +60,48 @@ load_job_config() {
   export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
 }
 
-## Collect split column definitions for a job into JOB_SPLITS array.
+## Validate job columns and separators after load_job_config.
+## - Columns must be non-empty after trimming.
+## - Separators must be non-empty.
+validate_job_config() {
+  local job="$1"
+  local raw_columns=()
+  local col trimmed
+
+  if [[ -z "$JOB_FIELD_SEPARATOR" ]]; then
+    echo "Empty FIELD_SEPARATOR for job: $job" >&2
+    return 1
+  fi
+  if [[ -z "$JOB_LINE_TERMINATOR" ]]; then
+    echo "Empty LINE_TERMINATOR for job: $job" >&2
+    return 1
+  fi
+
+  IFS=',' read -r -a raw_columns <<<"$JOB_COLUMNS"
+  for col in "${raw_columns[@]}"; do
+    trimmed="$(trim "$col")"
+    if [[ -z "$trimmed" ]]; then
+      echo "Invalid COLUMNS for job: $job (empty column name)" >&2
+      return 1
+    fi
+  done
+}
+
+## Collect split column definitions for a job into JOB_SPLITS_RAW array.
 ##
 ## Split properties (export_jobs.properties), Option B:
 ##   job.<name>.SPLIT.<col>=<chunk_size>,<chunks>
 ##
-## Output structure (JOB_SPLITS):
-## - "col|chunk_size|chunks"
+## Output structure (JOB_SPLITS_RAW):
+## - "col|chunk_size|chunks|extra"
 ##
 ## Notes:
 ## - Only columns listed in JOB_COLUMNS are actually split.
-## - Invalid or incomplete split values are ignored.
+## - Validation is handled by validate_job_splits().
 load_job_splits() {
   local job="$1"
   local prefix="job.${job}.SPLIT."
-  JOB_SPLITS=()
+  JOB_SPLITS_RAW=()
   local key col value chunk_size chunks extra
 
   while IFS= read -r key; do
@@ -84,16 +111,9 @@ load_job_splits() {
     IFS=',' read -r chunk_size chunks extra <<<"$value"
     chunk_size="$(trim "${chunk_size:-}")"
     chunks="$(trim "${chunks:-}")"
-
-    [[ "$chunk_size" =~ ^[0-9]+$ ]] || continue
-    [[ "$chunks" =~ ^[0-9]+$ ]] || continue
-    [[ "$chunk_size" -gt 0 ]] || continue
-    [[ "$chunks" -gt 0 ]] || continue
-
-    JOB_SPLITS+=("${col}|${chunk_size}|${chunks}")
+    JOB_SPLITS_RAW+=("${col}|${chunk_size}|${chunks}|${extra}")
   done < <(list_props_by_prefix "$prefix")
 
-  export JOB_SPLITS
 }
 
 ## Collect filter definitions for a job into JOB_FILTERS array.
@@ -146,5 +166,72 @@ load_job_filters() {
     fi
   done < <(list_props_by_prefix "$prefix")
 
-  export JOB_FILTERS
+}
+
+## Validate split rules and produce JOB_SPLITS for SQL building.
+validate_job_splits() {
+  local job="$1"
+  local raw_columns=()
+  local col_name
+  declare -A columns_set
+
+  IFS=',' read -r -a raw_columns <<<"$JOB_COLUMNS"
+  for col_name in "${raw_columns[@]}"; do
+    col_name="$(trim "$col_name")"
+    [[ -z "$col_name" ]] && continue
+    columns_set["$col_name"]=1
+  done
+
+  JOB_SPLITS=()
+  local item col chunk_size chunks extra
+  for item in "${JOB_SPLITS_RAW[@]:-}"; do
+    [[ -z "$item" ]] && continue
+    IFS='|' read -r col chunk_size chunks extra <<<"$item"
+
+    if [[ -z "$chunk_size" || -z "$chunks" ]]; then
+      echo "Invalid SPLIT for job: $job (empty value for $col)" >&2
+      return 1
+    fi
+    if [[ -n "$extra" ]]; then
+      echo "Invalid SPLIT for job: $job (too many parts for $col)" >&2
+      return 1
+    fi
+    if [[ ! "$chunk_size" =~ ^[0-9]+$ || ! "$chunks" =~ ^[0-9]+$ ]]; then
+      echo "Invalid SPLIT for job: $job ($col expects <chunk_size>,<chunks>)" >&2
+      return 1
+    fi
+    if [[ "$chunk_size" -le 0 || "$chunks" -le 0 ]]; then
+      echo "Invalid SPLIT for job: $job ($col expects positive integers)" >&2
+      return 1
+    fi
+    if [[ -z "${columns_set[$col]:-}" ]]; then
+      echo "Invalid SPLIT for job: $job (column not in COLUMNS: $col)" >&2
+      return 1
+    fi
+
+    JOB_SPLITS+=("${col}|${chunk_size}|${chunks}")
+  done
+
+}
+## Validate filter definitions that require extra fields.
+## - BETWEEN must have both .from and .to values.
+validate_job_filters() {
+  local job="$1"
+  local prefix="job.${job}.FILTER."
+  local key col op from to
+
+  while IFS= read -r key; do
+    if [[ "$key" =~ ^job\.${job}\.FILTER\.([^\.]+)\.op$ ]]; then
+      col="${BASH_REMATCH[1]}"
+      op="$(get_prop "$key")"
+      if [[ "${op^^}" == "BETWEEN" ]]; then
+        from="$(get_prop "${prefix}${col}.from")"
+        to="$(get_prop "${prefix}${col}.to")"
+        if [[ -z "$from" || -z "$to" ]]; then
+          echo "Invalid BETWEEN filter for job: $job (missing from/to for $col)" >&2
+          return 1
+        fi
+      fi
+    fi
+  done < <(list_props_by_prefix "$prefix")
 }

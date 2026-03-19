@@ -114,6 +114,18 @@ load_job_config_file() {
   load_properties "$JOBS_CONFIG"
 }
 
+validate_job_bundle() {
+  local job="$1"
+  # Keep validation orchestration here for a single, clear entry point.
+  # Primitive validators live in the lib files for reuse.
+  load_job_config "$job"
+  validate_job_config "$job"
+  load_job_filters "$job"
+  validate_job_filters "$job"
+  load_job_splits "$job"
+  validate_job_splits "$job"
+}
+
 resolve_jobs() {
   if [[ -n "$JOBS_ARG" ]]; then
     IFS=',' read -r -a JOBS_LIST <<<"$JOBS_ARG"
@@ -134,10 +146,8 @@ run_jobs() {
     job="${job%%+([[:space:]])}"
     [[ -z "$job" ]] && continue
 
-    # Load per-job settings and filters from properties.
-    load_job_config "$job"
-    load_job_filters "$job"
-    load_job_splits "$job"
+    # Load and validate per-job config, filters, and split rules.
+    validate_job_bundle "$job"
 
     if [[ -z "$JOB_DB_PROFILE" ]]; then
       echo "Missing DB profile for job: $job (set job.${job}.DB_PROFILE)" >&2

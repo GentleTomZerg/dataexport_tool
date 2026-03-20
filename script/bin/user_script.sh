@@ -61,8 +61,8 @@ FAKE
     --db-config "$CONFIG_FILE" \
     --jobs-config "$CONFIG_FILE" \
     --env-config "$ENV_CONFIG" \
-    --date "$batch_date"
-  # --execute
+    --date "$batch_date" \
+    --execute
 }
 
 main "$@"

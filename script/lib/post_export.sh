@@ -56,7 +56,9 @@ compress_file() {
   local remove_original="$4"
   local out=""
 
-  _post_export_require_file "$src"
+  if ! _post_export_require_file "$src"; then
+    return 1
+  fi
 
   case "$mode" in
     gz)
@@ -82,18 +84,26 @@ compress_file() {
 
   case "$mode" in
     gz)
-      gzip -c "$src" >"$out"
+      if ! gzip -c "$src" >"$out"; then
+        return 1
+      fi
       ;;
     tar)
-      tar -cf "$out" -C "$(dirname "$src")" "$(basename "$src")"
+      if ! tar -cf "$out" -C "$(dirname "$src")" "$(basename "$src")"; then
+        return 1
+      fi
       ;;
     tar.gz|tgz)
-      tar -czf "$out" -C "$(dirname "$src")" "$(basename "$src")"
+      if ! tar -czf "$out" -C "$(dirname "$src")" "$(basename "$src")"; then
+        return 1
+      fi
       ;;
   esac
 
   if [[ "$remove_original" == "true" ]]; then
-    rm -f "$src"
+    if ! rm -f "$src"; then
+      return 1
+    fi
   fi
 
   printf '%s' "$out"
@@ -107,7 +117,9 @@ transfer_file() {
   local rename_pattern="$5"
   local target_name target_path
 
-  _post_export_require_file "$src"
+  if ! _post_export_require_file "$src"; then
+    return 1
+  fi
 
   if [[ -z "$dest_dir" ]]; then
     echo "Missing transfer destination directory" >&2
@@ -130,16 +142,25 @@ transfer_file() {
 
   case "$mode" in
     move)
-      mv -f "$src" "$target_path"
+      if ! mv -f "$src" "$target_path"; then
+        return 1
+      fi
       ;;
     copy)
-      cp -f "$src" "$target_path"
+      if ! cp -f "$src" "$target_path"; then
+        return 1
+      fi
       ;;
     *)
       echo "Unsupported transfer mode: $mode" >&2
       return 1
       ;;
   esac
+
+  if [[ ! -f "$target_path" ]]; then
+    echo "Transfer failed; target not found: $target_path" >&2
+    return 1
+  fi
 
   printf '%s' "$target_path"
 }

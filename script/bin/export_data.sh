@@ -110,6 +110,17 @@ init_runtime_dates() {
   export MONTH_END="$(date -d "$MONTH_START +1 month -1 day" +%F)"
 }
 
+print_runtime_dates() {
+  echo "== Runtime Dates =="
+  echo "EXPORT_DATE=$EXPORT_DATE"
+  echo "TODAY=$TODAY"
+  echo "YESTERDAY=$YESTERDAY"
+  echo "EXPORT_MONTH=$EXPORT_MONTH"
+  echo "MONTH_START=$MONTH_START"
+  echo "MONTH_END=$MONTH_END"
+  echo
+}
+
 load_db_properties() {
   # Uses lib/db_config.sh which sources properties internally.
   load_properties "$DB_CONFIG"
@@ -133,6 +144,21 @@ load_env_properties() {
     [[ "$key" == ENV_* ]] || continue
     export "$key=$(get_prop "$key")"
   done < <(list_props_by_prefix "ENV_")
+}
+
+print_env_properties() {
+  local key
+
+  if [[ -z "$ENV_CONFIG" ]]; then
+    return 0
+  fi
+
+  echo "== Environment (ENV_*) =="
+  while IFS= read -r key; do
+    [[ "$key" == ENV_* ]] || continue
+    echo "${key}=${!key}"
+  done < <(list_props_by_prefix "ENV_")
+  echo
 }
 
 validate_job_bundle() {
@@ -200,25 +226,15 @@ run_jobs() {
 
     echo "== Job: $job =="
     echo "DB_PROFILE=$ACTIVE_DB_PROFILE"
+    echo "DB_TYPE=$DB_TYPE"
     echo "DB_HOST=$DB_HOST"
     echo "DB_PORT=$DB_PORT"
-    echo "DB_NAME=$DB_NAME"
-    echo "DB_USER=$DB_USER"
-    echo "DB_TYPE=$DB_TYPE"
-    echo "DB_CONFIG=$DB_CONFIG"
-    echo "JOBS_CONFIG=$JOBS_CONFIG"
-    echo "DB_PASSWORD_DIR=$(get_prop "${ACTIVE_DB_PROFILE}.DB_PASSWORD_DIR")"
-    echo "DB_PASSWORD_KEY_FILE=$DB_PASSWORD_KEY_FILE"
     echo "TABLE=$JOB_TABLE"
-    echo "SQL=$SQL"
+    echo "COLUMNS=$JOB_COLUMNS"
     echo "EXPORT_FILE=${JOB_EXPORT_FILE:-}"
     echo "FIELD_SEPARATOR=$JOB_FIELD_SEPARATOR"
     echo "LINE_TERMINATOR=$JOB_LINE_TERMINATOR"
-    echo "EXPORT_DATE=$EXPORT_DATE"
-    echo "YESTERDAY=$YESTERDAY"
-    echo "EXPORT_MONTH=$EXPORT_MONTH"
-    echo "MONTH_START=$MONTH_START"
-    echo "MONTH_END=$MONTH_END"
+    echo "SQL=$SQL"
     echo
 
     if [[ "$EXECUTE" -eq 1 ]]; then
@@ -238,21 +254,28 @@ run_jobs() {
         failed_jobs+=("$job")
         continue
       fi
+      local line_count
+      line_count="$(wc -l <"$JOB_EXPORT_FILE" | tr -d ' ')"
+      echo "EXPORT_OK: $JOB_EXPORT_FILE (lines=$line_count)"
 
       local artifact_path="$JOB_EXPORT_FILE"
       if [[ "$JOB_COMPRESS_ENABLED" == "true" ]]; then
+        local before_compress="$artifact_path"
         if ! artifact_path="$(compress_file "$artifact_path" "$JOB_COMPRESS_MODE" "$JOB_COMPRESS_OVERWRITE" "$JOB_COMPRESS_REMOVE_ORIGINAL")"; then
           echo "JOB_FAILED: $job (compress failed)" >&2
           failed_jobs+=("$job")
           continue
         fi
+        echo "COMPRESS_OK: $before_compress -> $artifact_path (mode=$JOB_COMPRESS_MODE remove_original=$JOB_COMPRESS_REMOVE_ORIGINAL)"
       fi
       if [[ "$JOB_TRANSFER_ENABLED" == "true" ]]; then
+        local before_transfer="$artifact_path"
         if ! artifact_path="$(transfer_file "$artifact_path" "$JOB_TRANSFER_DIR" "$JOB_TRANSFER_MODE" "$JOB_TRANSFER_OVERWRITE" "$JOB_TRANSFER_RENAME")"; then
           echo "JOB_FAILED: $job (transfer failed)" >&2
           failed_jobs+=("$job")
           continue
         fi
+        echo "TRANSFER_OK: $before_transfer -> $artifact_path (mode=$JOB_TRANSFER_MODE overwrite=$JOB_TRANSFER_OVERWRITE rename=${JOB_TRANSFER_RENAME:-})"
       fi
     fi
   done
@@ -270,7 +293,9 @@ main() {
   fi
   require_args
   init_runtime_dates "$RUN_DATE"
+  print_runtime_dates
   load_env_properties
+  print_env_properties
   load_db_properties
   load_job_config_file
   resolve_jobs

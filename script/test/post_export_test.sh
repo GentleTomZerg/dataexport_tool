@@ -34,4 +34,12 @@ transfer_dir="$TMP_DIR/transfer"
 out_tx="$(transfer_file "$SRC_FILE" "$transfer_dir" "copy" "true" '${JOB_NAME}_${EXPORT_DATE}${EXT}')"
 assert_true "[[ -f '$out_tx' ]]" "transfer output exists"
 
+# Transfer: invalid dest (use a file path) should fail
+bad_dest="$TMP_DIR/not_a_dir"
+printf 'nope' >"$bad_dest"
+if transfer_file "$SRC_FILE" "$bad_dest" "move" "true" ""; then
+  echo "FAIL: transfer should fail when dest is a file" >&2
+  exit 1
+fi
+
 echo "OK: post_export_test.sh"

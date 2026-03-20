@@ -6,16 +6,11 @@ fi
 set -euo pipefail
 shopt -s extglob
 
-declare -Ag PROPS
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_LIB_DIR/common.sh"
+unset _LIB_DIR
 
-## Trim leading/trailing whitespace from a string.
-## Usage: trimmed="$(trim "  value  ")"
-trim() {
-  local s="$1"
-  s="${s##+([[:space:]])}"
-  s="${s%%+([[:space:]])}"
-  printf '%s' "$s"
-}
+declare -Ag PROPS
 
 ## Resolve a placeholder name to a value.
 ## Precedence:

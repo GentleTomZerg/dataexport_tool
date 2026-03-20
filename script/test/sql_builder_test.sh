@@ -3,20 +3,8 @@ set -euo pipefail
 shopt -s extglob
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/sql_builder.sh"
-
-# Simple assertion helpers for readable test output.
-assert_eq() {
-  local expected="$1"
-  local actual="$2"
-  local msg="$3"
-  if [[ "$expected" != "$actual" ]]; then
-    echo "FAIL: $msg" >&2
-    echo "  expected: [$expected]" >&2
-    echo "  actual:   [$actual]" >&2
-    exit 1
-  fi
-}
 
 # Base data used by all tests.
 JOB_TABLE="users"

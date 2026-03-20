@@ -6,12 +6,9 @@ fi
 set -euo pipefail
 shopt -s extglob
 
-_sql_trim() {
-  local s="$1"
-  s="${s##+([[:space:]])}"
-  s="${s%%+([[:space:]])}"
-  printf '%s' "$s"
-}
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_LIB_DIR/common.sh"
+unset _LIB_DIR
 
 sql_escape_literal() {
   local s="$1"
@@ -28,7 +25,7 @@ _sql_build_select_columns() {
 
   IFS=',' read -r -a raw_columns <<<"$columns_raw"
   for item in "${raw_columns[@]}"; do
-    col="$(_sql_trim "$item")"
+    col="$(trim "$item")"
     [[ -z "$col" ]] && continue
     columns+=("$col")
   done

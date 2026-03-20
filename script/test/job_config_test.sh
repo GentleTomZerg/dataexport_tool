@@ -3,39 +3,8 @@ set -euo pipefail
 shopt -s extglob
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/job_config.sh"
-
-# Simple assertion helpers for readable test output.
-assert_eq() {
-  local expected="$1"
-  local actual="$2"
-  local msg="$3"
-  if [[ "$expected" != "$actual" ]]; then
-    echo "FAIL: $msg" >&2
-    echo "  expected: [$expected]" >&2
-    echo "  actual:   [$actual]" >&2
-    exit 1
-  fi
-}
-
-assert_true() {
-  local cond="$1"
-  local msg="$2"
-  if ! eval "$cond"; then
-    echo "FAIL: $msg" >&2
-    exit 1
-  fi
-}
-
-# Run a command in a subshell and expect it to fail.
-assert_fail() {
-  local msg="$1"
-  shift
-  if ("$@") >/dev/null 2>&1; then
-    echo "FAIL: $msg" >&2
-    exit 1
-  fi
-}
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

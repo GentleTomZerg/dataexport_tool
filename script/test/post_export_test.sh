@@ -2,16 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/post_export.sh"
-
-assert_true() {
-  local cond="$1"
-  local msg="$2"
-  if ! eval "$cond"; then
-    echo "FAIL: $msg" >&2
-    exit 1
-  fi
-}
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

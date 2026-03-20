@@ -32,6 +32,11 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 FAKE_BIN="$TMP_DIR/bin"
 mkdir -p "$FAKE_BIN"
 
+PASS_DIR="$TMP_DIR/pwd"
+KEY_FILE="$TMP_DIR/key_file"
+mkdir -p "$PASS_DIR"
+printf 'test-key' >"$KEY_FILE"
+
 MYSQL_LOG="$TMP_DIR/mysql.log"
 export MYSQL_LOG
 
@@ -47,14 +52,16 @@ chmod +x "$FAKE_BIN/mysql"
 DB_PROPS="$TMP_DIR/env.properties"
 DATA_PROPS="$TMP_DIR/export_jobs.properties"
 OUT_FILE="$TMP_DIR/exports/users_out.txt"
+PWD_FILE="$PASS_DIR/localhost_3306_example_user.pwd"
 
-cat > "$DB_PROPS" <<'PROPS'
+cat > "$DB_PROPS" <<PROPS
 primary.DB_HOST=localhost
 primary.DB_PORT=3306
 primary.DB_NAME=example_db
 primary.DB_USER=example_user
 primary.DB_TYPE=mysql
-DB_PASSWORD_DIR=./etc/local/pwd
+primary.DB_PASSWORD_DIR=$PASS_DIR
+primary.DB_PASSWORD_KEY_FILE=$KEY_FILE
 PROPS
 
 cat > "$DATA_PROPS" <<'PROPS'
@@ -68,6 +75,9 @@ PROPS
 
 # Inject the output path.
 sed -i "s#__OUT_FILE__#$OUT_FILE#" "$DATA_PROPS"
+
+# Create an encrypted password file that decrypt_password can read.
+printf 'test-pass' | openssl des3 -salt -in /dev/stdin -out "$PWD_FILE" -pass "file:$KEY_FILE" -pbkdf2 -iter 100000
 
 PATH="$FAKE_BIN:$PATH" \
   "$ROOT_DIR/bin/export_data.sh" --db-config "$DB_PROPS" --jobs-config "$DATA_PROPS" --job users --date 2026-03-17 --execute >/dev/null

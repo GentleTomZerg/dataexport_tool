@@ -17,7 +17,7 @@
 - `lib/db_config.sh`
   - Loads DB profile (host/port/name/user/type).
   - Builds password file path `{host}_{port}_{user}.pwd`.
-  - Defaults `DB_TYPE=mysql` if not set.
+  - All DB profile fields are required (including `DB_TYPE` and password settings).
 - `lib/crypto.sh`
   - Encrypt/decrypt passwords using `openssl` and `DB_PASSWORD_KEY_FILE` (path to key file).
   - `write_db_password_file` writes the profile-based `{host}_{port}_{user}.pwd`.
@@ -88,11 +88,15 @@ Required per profile:
 - `<profile>.DB_PORT` (numeric)
 - `<profile>.DB_NAME`
 - `<profile>.DB_USER`
+- `<profile>.DB_TYPE` (`mysql` or `postgres`)
+- `<profile>.DB_PASSWORD_DIR` (directory containing encrypted .pwd files)
+- `<profile>.DB_PASSWORD_KEY_FILE` (key file path used by openssl)
 
 Optional:
-- `<profile>.DB_TYPE` (default: `mysql`; allowed: `mysql`, `postgres`)
-- `<profile>.DB_PASSWORD_DIR` (default: `./etc/local/pwd`)
-- `<profile>.DB_PASSWORD_KEY_FILE` (required to encrypt/decrypt passwords)
+- None. All fields are required.
+
+Defaults:
+- None. All fields must be provided by the user.
 
 ### Job Config Format
 
@@ -109,6 +113,11 @@ Optional:
 - `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`
 - `job.<name>.COMPRESS.*`
 - `job.<name>.TRANSFER.*`
+
+Defaults:
+- `job.<name>.EXPORT_FILE` can be omitted when not using `--execute` (SQL-only mode).
+- `job.<name>.FIELD_SEPARATOR` defaults to `\t`.
+- `job.<name>.LINE_TERMINATOR` defaults to `\n`.
 
 ## Filters
 
@@ -140,6 +149,19 @@ Set by `bin/export_data.sh`:
 - `openssl`, `mysql`, and `psql` are required only when those code paths are used.
 
 ## Usage
+
+### Common commands
+
+- SQL-only (default):
+  `bash bin/export_data.sh --db-config etc/local/config/export_jobs.properties --jobs-config etc/local/config/export_jobs.properties --env-config etc/local/env.properties`
+- Execute exports:
+  `bash bin/export_data.sh --db-config etc/local/config/export_jobs.properties --jobs-config etc/local/config/export_jobs.properties --env-config etc/local/env.properties --execute`
+- Run a single job:
+  `bash bin/export_data.sh --db-config etc/local/config/export_jobs.properties --jobs-config etc/local/config/export_jobs.properties --env-config etc/local/env.properties --job users --date 2026-03-17`
+
+Notes:
+- `--db-config` and `--jobs-config` currently point to the same file since DB profiles and jobs live together.
+- `--env-config` is optional and only needed if `ENV_*` variables are referenced in the config.
 
 Print SQL for all jobs:
 

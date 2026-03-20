@@ -31,21 +31,32 @@ assert_contains() {
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+PASS_DIR="$TMP_DIR/pwd"
+KEY_FILE="$TMP_DIR/key_file"
+mkdir -p "$PASS_DIR"
+printf 'test-key' >"$KEY_FILE"
+touch "$PASS_DIR/localhost_3306_example_user.pwd"
+touch "$PASS_DIR/rep-host_5432_rep_user.pwd"
+
 DB_PROPS="$TMP_DIR/env.properties"
 DATA_PROPS="$TMP_DIR/export_jobs.properties"
 
-cat > "$DB_PROPS" <<'PROPS'
+cat > "$DB_PROPS" <<PROPS
 primary.DB_HOST=localhost
 primary.DB_PORT=3306
 primary.DB_NAME=example_db
 primary.DB_USER=example_user
 primary.DB_TYPE=mysql
+primary.DB_PASSWORD_DIR=$PASS_DIR
+primary.DB_PASSWORD_KEY_FILE=$KEY_FILE
 
 reporting.DB_HOST=rep-host
 reporting.DB_PORT=5432
 reporting.DB_NAME=rep_db
 reporting.DB_USER=rep_user
 reporting.DB_TYPE=postgres
+reporting.DB_PASSWORD_DIR=$PASS_DIR
+reporting.DB_PASSWORD_KEY_FILE=$KEY_FILE
 PROPS
 
 cat > "$DATA_PROPS" <<'PROPS'

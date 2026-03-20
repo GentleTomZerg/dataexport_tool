@@ -10,12 +10,14 @@ Notes:
   - This wrapper is POSIX sh compatible.
   - export_data.sh is always executed with bash.
   - The single argument maps to export_data.sh --date.
-  - Update DB_CONFIG and JOBS_CONFIG below if your paths differ.
+  - Update CONFIG_FILE below if your paths differ.
+  - ENV_CONFIG is optional; only needed if ENV_* variables are referenced.
   - Set FAKE_MYSQL=1 to use a stub mysql client for testing.
 
 export_data.sh flags:
   --db-config <file>
   --jobs-config <file>
+  --env-config <file>
   --job <name>
   --jobs <a,b>
   --date <YYYY-MM-DD>
@@ -37,10 +39,8 @@ main() {
   ROOT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
   # Default locations (edit here if you keep configs elsewhere).
-  DB_CONFIG="$ROOT_DIR/etc/local/env.properties"
-  JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_jobs.properties"
-  # DB_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
-  # JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
+  CONFIG_FILE="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  ENV_CONFIG="$ROOT_DIR/etc/local/env.properties"
 
   FAKE_MYSQL=1
 
@@ -58,10 +58,10 @@ FAKE
   fi
 
   exec bash "$ROOT_DIR/bin/export_data.sh" \
-    --db-config "$DB_CONFIG" \
-    --jobs-config "$JOBS_CONFIG" \
-    --date "$batch_date" \
-    --jobs var_expansion
+    --db-config "$CONFIG_FILE" \
+    --jobs-config "$CONFIG_FILE" \
+    --env-config "$ENV_CONFIG" \
+    --date "$batch_date"
   # --execute
 }
 

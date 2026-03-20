@@ -34,7 +34,7 @@ _post_export_render_name() {
   ext="$(_post_export_ext "$base")"
 
   local out="$pattern"
-  out="${out//\$\{JOB_NAME\}/$JOB_NAME}"
+  out="${out//\$\{JOB_NAME\}/${JOB[name]}}"
   out="${out//\$\{EXPORT_DATE\}/$EXPORT_DATE}"
   out="${out//\$\{BASENAME\}/$base}"
   out="${out//\$\{EXT\}/$ext}"

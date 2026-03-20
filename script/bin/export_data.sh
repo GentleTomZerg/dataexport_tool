@@ -101,13 +101,27 @@ init_runtime_dates() {
   if [[ -z "$run_date" ]]; then
     run_date="$(date +%F)"
   fi
-  # Uses GNU date for relative date math (e.g., "-1 day").
   export EXPORT_DATE="$run_date"
   export TODAY="$EXPORT_DATE"
-  export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"
-  export EXPORT_MONTH="$(date -d "$EXPORT_DATE" +%Y-%m)"
-  export MONTH_START="$(date -d "$EXPORT_DATE" +%Y-%m-01)"
-  export MONTH_END="$(date -d "$MONTH_START +1 month -1 day" +%F)"
+
+  if [[ "$(uname)" == "Darwin" ]]; then
+    local epoch
+    epoch="$(date -j -f "%Y-%m-%d" "$EXPORT_DATE" "+%s")"
+    export YESTERDAY="$(date -r $((epoch - 86400)) "+%F")"
+    export EXPORT_MONTH="$(date -r "$epoch" "+%Y-%m")"
+    export MONTH_START="$(date -r "$epoch" "+%Y-%m-01")"
+    local next_month_epoch
+    next_month_epoch="$(date -j -f "%Y-%m-%d" "$MONTH_START" "+%s")"
+    next_month_epoch=$((next_month_epoch + 32 * 86400))
+    local next_month_first
+    next_month_first="$(date -r "$next_month_epoch" "+%Y-%m-01")"
+    export MONTH_END="$(date -r $(($(date -j -f "%Y-%m-%d" "$next_month_first" "+%s") - 86400)) "+%F")"
+  else
+    export YESTERDAY="$(date -d "$EXPORT_DATE -1 day" +%F)"
+    export EXPORT_MONTH="$(date -d "$EXPORT_DATE" +%Y-%m)"
+    export MONTH_START="$(date -d "$EXPORT_DATE" +%Y-%m-01)"
+    export MONTH_END="$(date -d "$MONTH_START +1 month -1 day" +%F)"
+  fi
 }
 
 print_runtime_dates() {
@@ -163,12 +177,8 @@ print_env_properties() {
 
 validate_job_bundle() {
   local job="$1"
-  # Keep validation orchestration here for a single, clear entry point.
-  # Primitive validators live in the lib files for reuse.
   load_job_config "$job"
   validate_job_config "$job"
-  load_job_filters "$job"
-  validate_job_filters "$job"
   load_job_splits "$job"
   validate_job_splits "$job"
   load_job_transfer "$job"
@@ -205,15 +215,15 @@ run_jobs() {
       continue
     fi
 
-    if [[ -z "$JOB_DB_PROFILE" ]]; then
+    if [[ -z "${JOB[db_profile]}" ]]; then
       echo "Missing DB profile for job: $job (set job.${job}.DB_PROFILE)" >&2
       echo "JOB_FAILED: $job (missing DB_PROFILE)" >&2
       failed_jobs+=("$job")
       continue
     fi
 
-    if [[ "$JOB_DB_PROFILE" != "$ACTIVE_DB_PROFILE" || -z "${DB_HOST:-}" ]]; then
-      ACTIVE_DB_PROFILE="$JOB_DB_PROFILE"
+    if [[ "${JOB[db_profile]}" != "$ACTIVE_DB_PROFILE" || -z "${DB_HOST:-}" ]]; then
+      ACTIVE_DB_PROFILE="${JOB[db_profile]}"
       if ! load_db_profile "$ACTIVE_DB_PROFILE"; then
         echo "JOB_FAILED: $job (invalid DB profile: $ACTIVE_DB_PROFILE)" >&2
         failed_jobs+=("$job")
@@ -229,53 +239,53 @@ run_jobs() {
     echo "DB_TYPE=$DB_TYPE"
     echo "DB_HOST=$DB_HOST"
     echo "DB_PORT=$DB_PORT"
-    echo "TABLE=$JOB_TABLE"
-    echo "COLUMNS=$JOB_COLUMNS"
-    echo "EXPORT_FILE=${JOB_EXPORT_FILE:-}"
-    echo "FIELD_SEPARATOR=$JOB_FIELD_SEPARATOR"
-    echo "LINE_TERMINATOR=$JOB_LINE_TERMINATOR"
+    echo "TABLE=${JOB[table]}"
+    echo "COLUMNS=${JOB[columns]}"
+    echo "EXPORT_FILE=${JOB[export_file]:-}"
+    echo "FIELD_SEPARATOR=${JOB[field_separator]}"
+    echo "LINE_TERMINATOR=${JOB[line_terminator]}"
     echo "SQL=$SQL"
     echo
 
     if [[ "$EXECUTE" -eq 1 ]]; then
-      if [[ -z "${JOB_EXPORT_FILE:-}" ]]; then
+      if [[ -z "${JOB[export_file]:-}" ]]; then
         echo "Missing EXPORT_FILE for job: $job" >&2
         echo "JOB_FAILED: $job (missing EXPORT_FILE)" >&2
         failed_jobs+=("$job")
         continue
       fi
-      if ! mkdir -p "$(dirname "$JOB_EXPORT_FILE")"; then
+      if ! mkdir -p "$(dirname "${JOB[export_file]}")"; then
         echo "JOB_FAILED: $job (failed to create export dir)" >&2
         failed_jobs+=("$job")
         continue
       fi
-      if ! sql_exec_export "$SQL" "$JOB_EXPORT_FILE" "$JOB_FIELD_SEPARATOR" "$JOB_LINE_TERMINATOR"; then
+      if ! sql_exec_export "$SQL" "${JOB[export_file]}" "${JOB[field_separator]}" "${JOB[line_terminator]}"; then
         echo "JOB_FAILED: $job (sql_exec_export failed)" >&2
         failed_jobs+=("$job")
         continue
       fi
       local line_count
-      line_count="$(wc -l <"$JOB_EXPORT_FILE" | tr -d ' ')"
-      echo "EXPORT_OK: $JOB_EXPORT_FILE (lines=$line_count)"
+      line_count="$(wc -l <"${JOB[export_file]}" | tr -d ' ')"
+      echo "EXPORT_OK: ${JOB[export_file]} (lines=$line_count)"
 
-      local artifact_path="$JOB_EXPORT_FILE"
-      if [[ "$JOB_COMPRESS_ENABLED" == "true" ]]; then
+      local artifact_path="${JOB[export_file]}"
+      if [[ "${JOB_COMPRESS[enabled]}" == "true" ]]; then
         local before_compress="$artifact_path"
-        if ! artifact_path="$(compress_file "$artifact_path" "$JOB_COMPRESS_MODE" "$JOB_COMPRESS_OVERWRITE" "$JOB_COMPRESS_REMOVE_ORIGINAL")"; then
+        if ! artifact_path="$(compress_file "$artifact_path" "${JOB_COMPRESS[mode]}" "${JOB_COMPRESS[overwrite]}" "${JOB_COMPRESS[remove_original]}")"; then
           echo "JOB_FAILED: $job (compress failed)" >&2
           failed_jobs+=("$job")
           continue
         fi
-        echo "COMPRESS_OK: $before_compress -> $artifact_path (mode=$JOB_COMPRESS_MODE remove_original=$JOB_COMPRESS_REMOVE_ORIGINAL)"
+        echo "COMPRESS_OK: $before_compress -> $artifact_path (mode=${JOB_COMPRESS[mode]} remove_original=${JOB_COMPRESS[remove_original]})"
       fi
-      if [[ "$JOB_TRANSFER_ENABLED" == "true" ]]; then
+      if [[ "${JOB_TRANSFER[enabled]}" == "true" ]]; then
         local before_transfer="$artifact_path"
-        if ! artifact_path="$(transfer_file "$artifact_path" "$JOB_TRANSFER_DIR" "$JOB_TRANSFER_MODE" "$JOB_TRANSFER_OVERWRITE" "$JOB_TRANSFER_RENAME")"; then
+        if ! artifact_path="$(transfer_file "$artifact_path" "${JOB_TRANSFER[dir]}" "${JOB_TRANSFER[mode]}" "${JOB_TRANSFER[overwrite]}" "${JOB_TRANSFER[rename]}")"; then
           echo "JOB_FAILED: $job (transfer failed)" >&2
           failed_jobs+=("$job")
           continue
         fi
-        echo "TRANSFER_OK: $before_transfer -> $artifact_path (mode=$JOB_TRANSFER_MODE overwrite=$JOB_TRANSFER_OVERWRITE rename=${JOB_TRANSFER_RENAME:-})"
+        echo "TRANSFER_OK: $before_transfer -> $artifact_path (mode=${JOB_TRANSFER[mode]} overwrite=${JOB_TRANSFER[overwrite]} rename=${JOB_TRANSFER[rename]:-})"
       fi
     fi
   done

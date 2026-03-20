@@ -60,54 +60,21 @@ _sql_build_select_columns() {
   printf '%s' "$(IFS=,; echo "${columns[*]}")"
 }
 
-## Build a SELECT SQL from JOB_TABLE, JOB_COLUMNS, JOB_FILTERS.
+## Build a SELECT SQL from JOB[table], JOB[columns], JOB[where].
 ##
-## Expected JOB_FILTERS format (built by lib/job_config.sh):
-##   Each entry is a pipe-separated string:
-##     - "col|op|value"               (single value)
-##     - "col|BETWEEN|from|to"        (range)
+## If JOB[where] is set, it is used as the WHERE clause directly.
+## Otherwise no WHERE clause is added.
 ##
-## Supported operators:
-##   - any operator passed through as-is (e.g. =, !=, <, <=, >, >=, LIKE)
-##   - BETWEEN with from/to
-##
-## Behavior:
-##   - Values are always single-quoted and escaped for single quotes.
-##   - Filters are combined with AND.
+## Splits are applied to the SELECT columns regardless of WHERE source.
 ##
 ## Usage: sql="$(build_select_sql)"
 build_select_sql() {
   local select_cols
-  select_cols="$(_sql_build_select_columns "$JOB_COLUMNS")"
-  local sql="SELECT ${select_cols} FROM ${JOB_TABLE}"
-  local where_parts=()
-  local item col op v1 v2 esc
+  select_cols="$(_sql_build_select_columns "${JOB[columns]}")"
+  local sql="SELECT ${select_cols} FROM ${JOB[table]}"
 
-  if [[ ${JOB_FILTERS+set} ]]; then
-    for item in "${JOB_FILTERS[@]}"; do
-      IFS='|' read -r col op v1 v2 <<<"$item"
-      if [[ "${op^^}" == "BETWEEN" ]]; then
-        # Format: col|BETWEEN|from|to
-        esc="$(sql_escape_literal "$v1")"
-        v2="$(sql_escape_literal "$v2")"
-        where_parts+=("${col} BETWEEN '${esc}' AND '${v2}'")
-      else
-        # Format: col|op|value (op defaults to '=' in job_config)
-        esc="$(sql_escape_literal "$v1")"
-        where_parts+=("${col} ${op} '${esc}'")
-      fi
-    done
-  fi
-
-  if [[ "${#where_parts[@]}" -gt 0 ]]; then
-    local i joined=""
-    for i in "${!where_parts[@]}"; do
-      if [[ -n "$joined" ]]; then
-        joined+=" AND "
-      fi
-      joined+="${where_parts[$i]}"
-    done
-    sql+=" WHERE ${joined}"
+  if [[ -n "${JOB[where]:-}" ]]; then
+    sql+=" WHERE ${JOB[where]}"
   fi
 
   printf '%s' "$sql"

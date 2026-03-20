@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/sql_exec.sh"
 
+declare -Ag JOB
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -61,9 +63,9 @@ export DB_TYPE DB_PASSWORD_FILE
 printf 'dummy' >"$DB_PASSWORD_FILE"
 
 out_file="$TMP_DIR/mysql.out"
-JOB_FIELD_SEPARATOR="|"
-JOB_LINE_TERMINATOR="\\n"
-export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
+JOB[field_separator]="|"
+JOB[line_terminator]="\\n"
+export JOB
 
 sql_exec_export "SELECT 1" "$out_file"
 printf '1|Alice\n2|Bob\n' >"$TMP_DIR/expected_mysql.out"
@@ -78,9 +80,9 @@ export DB_TYPE DB_PORT DB_PASSWORD_FILE
 printf 'dummy' >"$DB_PASSWORD_FILE"
 
 out_file="$TMP_DIR/psql.out"
-JOB_FIELD_SEPARATOR=","
-JOB_LINE_TERMINATOR="\\r\\n"
-export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
+JOB[field_separator]=","
+JOB[line_terminator]="\\r\\n"
+export JOB
 
 sql_exec_export "SELECT 1" "$out_file"
 printf '1,Alice\r\n2,Bob\r\n' >"$TMP_DIR/expected_psql.out"
@@ -94,9 +96,9 @@ export DB_TYPE DB_PASSWORD_FILE
 rm -f "$MYSQL_LOG.pwd"
 
 out_file="$TMP_DIR/mysql.nopwd.out"
-JOB_FIELD_SEPARATOR=","
-JOB_LINE_TERMINATOR="\\n"
-export JOB_FIELD_SEPARATOR JOB_LINE_TERMINATOR
+JOB[field_separator]=","
+JOB[line_terminator]="\\n"
+export JOB
 
 sql_exec_export "SELECT 1" "$out_file"
 assert_true "[[ ! -f '$MYSQL_LOG.pwd' || ! -s '$MYSQL_LOG.pwd' ]]" "mysql no password used"

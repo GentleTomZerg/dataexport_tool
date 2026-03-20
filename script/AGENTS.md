@@ -27,14 +27,15 @@
 - `bin/password_tool.sh`
   - Encodes and writes a profile-based password file under `<profile>.DB_PASSWORD_DIR`.
 - `lib/job_config.sh`
-  - Loads a single job config and its filters from `export_jobs.properties`.
+  - Loads a single job config from `export_jobs.properties`.
   - Loads optional field/line separators (defaults: `\t`, `\n`).
+  - Loads optional `WHERE` clause for filtering.
   - Loads optional split-column rules (Option B: `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`).
   - Loads optional post-export settings for compression and transfer.
 - `lib/post_export.sh`
   - Optional post-export processing: compress and/or move/copy artifacts.
 - `lib/sql_builder.sh`
-  - Builds a `SELECT` with filters, supports `BETWEEN`.
+  - Builds a `SELECT` from `JOB[table]`, `JOB[columns]`, and `JOB[where]`.
   - For MySQL only, can expand TEXT columns into chunked `SUBSTRING` pieces and omit the original column.
 - `lib/sql_exec.sh`
   - SQL executor (mysql default, postgres supported). Uses password file if present. Not used in default flow.
@@ -78,7 +79,7 @@ job.users.COLUMNS=id,name,email,created_at
 job.users.EXPORT_FILE=./exports/${job.users.TABLE_NAME}_${EXPORT_DATE}.csv
 job.users.FIELD_SEPARATOR=|
 job.users.LINE_TERMINATOR=\n
-job.users.FILTER.status=active
+job.users.WHERE=status = 'active'
 ```
 
 ### DB Config Format
@@ -109,7 +110,7 @@ Optional:
 - `job.<name>.EXPORT_FILE`
 - `job.<name>.FIELD_SEPARATOR` (default: `\t`)
 - `job.<name>.LINE_TERMINATOR` (default: `\n`)
-- `job.<name>.FILTER.*`
+- `job.<name>.WHERE` (SQL WHERE clause, supports `${VAR}` expansion)
 - `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`
 - `job.<name>.COMPRESS.*`
 - `job.<name>.TRANSFER.*`
@@ -119,17 +120,32 @@ Defaults:
 - `job.<name>.FIELD_SEPARATOR` defaults to `\t`.
 - `job.<name>.LINE_TERMINATOR` defaults to `\n`.
 
-## Filters
+## WHERE Clause
 
-- Basic: `job.<name>.FILTER.col=value` (defaults to `=`).
-- Operator: `job.<name>.FILTER.col.op=LIKE` + `.value=%foo%`.
-- BETWEEN:
+The `WHERE` property is a raw SQL WHERE clause. It supports `${VAR}` expansion using runtime date variables and environment variables. The tool does not parse or escape the clause — you write the SQL directly.
+
+Examples:
 
 ```
-job.<name>.FILTER.date.op=BETWEEN
-job.<name>.FILTER.date.from=2024-01-01
-job.<name>.FILTER.date.to=2024-01-31
+job.users.WHERE=status = 'active'
+
+job.orders.WHERE=total >= 100 AND region IN ('US', 'EU')
+
+job.events.WHERE=created_at BETWEEN '${YESTERDAY}' AND '${TODAY}'
+
+job.monthly.WHERE=created_at BETWEEN '${MONTH_START}' AND '${MONTH_END}'
 ```
+
+When `WHERE` is omitted, no WHERE clause is added to the generated SQL.
+
+Combined with splits:
+
+```
+job.users.WHERE=status = 'active'
+job.users.SPLIT.content=4000,3
+```
+
+Produces: `SELECT id,SUBSTRING(content,1,4000) AS content_part1,... FROM users WHERE status = 'active'`
 
 ## Runtime Date Variables
 

@@ -17,69 +17,47 @@ job.users.COLUMNS=id,name,email,notes,content
 job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
 job.users.FIELD_SEPARATOR=|
 job.users.LINE_TERMINATOR=\r\n
-job.users.FILTER.status=active
-job.users.FILTER.name.value=%bob%
-job.users.FILTER.name.op=LIKE
-job.users.FILTER.signup.op=BETWEEN
-job.users.FILTER.signup.from=2024-01-01
-job.users.FILTER.signup.to=2024-01-31
+job.users.WHERE=status = 'active' AND name LIKE '%bob%'
 job.users.SPLIT.content=4000,3
 job.users.SPLIT.notes=2000,2
 
 job.orders.TABLE_NAME=orders
 job.orders.COLUMNS=id,total,created_at
-# No DB_PROFILE or EXPORT_FILE for orders
-job.orders.FILTER.total.value=100
-job.orders.FILTER.total.op=>=
-
-job.daily_events.TABLE_NAME=events
-job.daily_events.COLUMNS=id,type,created_at
-job.daily_events.EXPORT_FILE=./exports/events_${YESTERDAY}.csv
-job.daily_events.FILTER.created_at.op=BETWEEN
-job.daily_events.FILTER.created_at.from=${YESTERDAY}
-job.daily_events.FILTER.created_at.to=${TODAY}
+job.orders.WHERE=total >= 100
 
 job.monthly_events.TABLE_NAME=events
 job.monthly_events.COLUMNS=id,type,created_at
 job.monthly_events.EXPORT_FILE=./exports/events_${EXPORT_MONTH}.csv
-job.monthly_events.FILTER.created_at.op=BETWEEN
-job.monthly_events.FILTER.created_at.from=${MONTH_START}
-job.monthly_events.FILTER.created_at.to=${MONTH_END}
+job.monthly_events.WHERE=created_at BETWEEN '${MONTH_START}' AND '${MONTH_END}'
 
 # Broken job (missing columns)
 job.broken.TABLE_NAME=broken_table
 PROPS
 
-# Provide a runtime variable used in EXPORT_FILE expansion.
+# Provide runtime variables used in expansion.
 EXPORT_DATE="2026-03-17"
 export EXPORT_DATE
+MONTH_START="2026-03-01"
+export MONTH_START
+MONTH_END="2026-03-31"
+export MONTH_END
 
 load_properties "$PROPS_FILE"
 
 # list_jobs should discover entries (including broken and date-based).
 mapfile -t jobs < <(list_jobs)
-assert_true "[[ ${#jobs[@]} -eq 5 ]]" "list_jobs count"
+assert_true "[[ ${#jobs[@]} -eq 4 ]]" "list_jobs count"
 
 # Load users job.
 load_job_config "users"
-assert_eq "users" "$JOB_NAME" "job name"
-assert_eq "primary" "$JOB_DB_PROFILE" "db profile"
-assert_eq "users" "$JOB_TABLE" "table name"
-assert_eq "id,name,email,notes,content" "$JOB_COLUMNS" "columns"
-assert_eq "./exports/users_2026-03-17.csv" "$JOB_EXPORT_FILE" "export file expansion"
-assert_eq "|" "$JOB_FIELD_SEPARATOR" "field separator"
-assert_eq "\\r\\n" "$JOB_LINE_TERMINATOR" "line terminator"
-
-# Filters: collect and compare as a set because order is not guaranteed.
-load_job_filters "users"
-mapfile -t filters < <(printf '%s\n' "${JOB_FILTERS[@]}" | sort)
-mapfile -t expected < <(cat <<'EXPECT' | sort
-name|LIKE|%bob%
-status|=|active
-signup|BETWEEN|2024-01-01|2024-01-31
-EXPECT
-)
-assert_eq "${expected[*]}" "${filters[*]}" "users filters set"
+assert_eq "users" "${JOB[name]}" "job name"
+assert_eq "primary" "${JOB[db_profile]}" "db profile"
+assert_eq "users" "${JOB[table]}" "table name"
+assert_eq "id,name,email,notes,content" "${JOB[columns]}" "columns"
+assert_eq "./exports/users_2026-03-17.csv" "${JOB[export_file]}" "export file expansion"
+assert_eq "|" "${JOB[field_separator]}" "field separator"
+assert_eq "\\r\\n" "${JOB[line_terminator]}" "line terminator"
+assert_eq "status = 'active' AND name LIKE '%bob%'" "${JOB[where]}" "where clause"
 
 # Split columns.
 load_job_splits "users"
@@ -92,14 +70,26 @@ EXPECT
 )
 assert_eq "${expected_splits[*]}" "${splits[*]}" "users split set"
 
-# Orders job: no DB_PROFILE/EXPORT_FILE, single filter with op.
+# Orders job: WHERE without FILTER.
 load_job_config "orders"
-assert_eq "" "$JOB_DB_PROFILE" "orders db profile empty"
-assert_eq "" "$JOB_EXPORT_FILE" "orders export file empty"
-assert_eq "\\t" "$JOB_FIELD_SEPARATOR" "orders field separator default"
-assert_eq "\\n" "$JOB_LINE_TERMINATOR" "orders line terminator default"
-load_job_filters "orders"
-assert_eq "total|>=|100" "${JOB_FILTERS[0]}" "orders filter"
+assert_eq "total >= 100" "${JOB[where]}" "orders where clause"
+assert_eq "" "${JOB[db_profile]}" "orders db profile empty"
+assert_eq "" "${JOB[export_file]}" "orders export file empty"
+assert_eq "\\t" "${JOB[field_separator]}" "orders field separator default"
+assert_eq "\\n" "${JOB[line_terminator]}" "orders line terminator default"
+
+# Monthly events job: WHERE with ${VAR} expansion.
+load_job_config "monthly_events"
+assert_eq "created_at BETWEEN '2026-03-01' AND '2026-03-31'" "${JOB[where]}" "monthly events where expansion"
+
+# Job without WHERE: should be empty.
+cat > "$PROPS_FILE" <<'PROPS'
+job.nowhere.TABLE_NAME=t
+job.nowhere.COLUMNS=id
+PROPS
+load_properties "$PROPS_FILE"
+load_job_config "nowhere"
+assert_eq "" "${JOB[where]}" "no where clause"
 
 # Broken job should fail.
 assert_fail "broken job should fail" load_job_config "broken"

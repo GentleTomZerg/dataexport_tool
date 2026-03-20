@@ -52,8 +52,8 @@ job.users.FIELD_SEPARATOR=|
 job.users.LINE_TERMINATOR=\n
 PROPS
 
-# Inject the output path.
-sed -i "s#__OUT_FILE__#$OUT_FILE#" "$DATA_PROPS"
+# Inject the output path (macOS-compatible sed -i).
+sed -i '' "s#__OUT_FILE__#$OUT_FILE#" "$DATA_PROPS"
 
 # Create an encrypted password file that decrypt_password can read.
 printf 'test-pass' | openssl des3 -salt -in /dev/stdin -out "$PWD_FILE" -pass "file:$KEY_FILE" -pbkdf2 -iter 100000

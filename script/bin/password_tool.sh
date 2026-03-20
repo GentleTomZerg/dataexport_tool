@@ -18,13 +18,13 @@ Usage:
 
 Notes:
 - --password and --key-file are required (no interactive prompts).
-- Password file location is derived from DB_PASSWORD_DIR and DB profile fields.
+- Password file location is derived from <profile>.DB_PASSWORD_DIR and DB profile fields.
 - The key file must exist; encryption uses openssl.
 USAGE
 }
 
 parse_args() {
-  DB_PROPS="$ROOT_DIR/etc/local/env.properties"
+  DB_PROPS="$ROOT_DIR/etc/local/config/export_jobs.properties"
   DB_PROFILE="primary"
   INPUT_PASSWORD=""
   INPUT_KEY_FILE=""

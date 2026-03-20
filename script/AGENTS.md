@@ -25,7 +25,7 @@
 ## Toolkit
 
 - `bin/password_tool.sh`
-  - Encodes and writes a profile-based password file under `DB_PASSWORD_DIR`.
+  - Encodes and writes a profile-based password file under `<profile>.DB_PASSWORD_DIR`.
 - `lib/job_config.sh`
   - Loads a single job config and its filters from `export_jobs.properties`.
   - Loads optional field/line separators (defaults: `\t`, `\n`).
@@ -52,7 +52,16 @@
 
 ## Config Files
 
-### `etc/local/env.properties` (DB profiles)
+### `etc/local/env.properties` (ENV_* variables)
+
+```
+ENV_WORK_PATH=/nas/lens_scripts
+ENV_GTP_TEMP_PATH=/nas/gtpdata/temp
+ENV_EDP_OUT_PATH=/nas/gtpdata/edp/out
+ENV_EDP_IN_PATH=/nas/gtpdata/edp/in
+```
+
+### `etc/local/config/export_jobs.properties` (multi-job export)
 
 ```
 primary.DB_HOST=localhost
@@ -60,12 +69,9 @@ primary.DB_PORT=3306
 primary.DB_NAME=example_db
 primary.DB_USER=example_user
 primary.DB_TYPE=mysql
-DB_PASSWORD_DIR=./etc/local/pwd
-```
+primary.DB_PASSWORD_DIR=./etc/local/pwd
+primary.DB_PASSWORD_KEY_FILE=./etc/local/pwd/key_file
 
-### `etc/local/config/export_jobs.properties` (multi-job export)
-
-```
 job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email,created_at
@@ -85,7 +91,8 @@ Required per profile:
 
 Optional:
 - `<profile>.DB_TYPE` (default: `mysql`; allowed: `mysql`, `postgres`)
-- `DB_PASSWORD_DIR` (default: `./etc/local/pwd`)
+- `<profile>.DB_PASSWORD_DIR` (default: `./etc/local/pwd`)
+- `<profile>.DB_PASSWORD_KEY_FILE` (required to encrypt/decrypt passwords)
 
 ### Job Config Format
 

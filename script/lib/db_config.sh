@@ -14,34 +14,41 @@ unset _DBCFG_DIR
 ## Required keys: <profile>.DB_HOST, <profile>.DB_PORT, <profile>.DB_NAME, <profile>.DB_USER
 ## Optional keys:
 ## - <profile>.DB_TYPE (defaults to mysql)
-## - DB_PASSWORD_DIR (defaults to ./etc/local/pwd)
+## - <profile>.DB_PASSWORD_DIR (defaults to ./etc/local/pwd)
+## - <profile>.DB_PASSWORD_KEY_FILE (optional; if omitted, crypto expects DB_PASSWORD_KEY_FILE)
 ## Usage: load_db_profile "primary"
 load_db_profile() {
   local profile="$1"
 
+  DB_PROFILE="$profile"
   DB_HOST="$(get_prop "${profile}.DB_HOST")"
   DB_PORT="$(get_prop "${profile}.DB_PORT")"
   DB_NAME="$(get_prop "${profile}.DB_NAME")"
   DB_USER="$(get_prop "${profile}.DB_USER")"
   DB_TYPE="$(get_prop "${profile}.DB_TYPE")"
+  DB_PASSWORD_KEY_FILE="$(get_prop "${profile}.DB_PASSWORD_KEY_FILE")"
   [[ -z "$DB_TYPE" ]] && DB_TYPE="mysql"
 
   if [[ -z "$DB_HOST" || -z "$DB_PORT" || -z "$DB_NAME" || -z "$DB_USER" ]]; then
     echo "Missing DB config for profile: $profile" >&2
     return 1
   fi
+  if [[ -z "$DB_PASSWORD_KEY_FILE" ]]; then
+    echo "Missing DB_PASSWORD_KEY_FILE for profile: $profile" >&2
+    return 1
+  fi
 
   DB_PASSWORD_FILE="$(db_password_file)"
 
-  export DB_HOST DB_PORT DB_NAME DB_USER DB_TYPE DB_PASSWORD_FILE
+  export DB_PROFILE DB_HOST DB_PORT DB_NAME DB_USER DB_TYPE DB_PASSWORD_FILE DB_PASSWORD_KEY_FILE
 }
 
 ## Build the encrypted password file path based on current DB_* values.
-## Format: {DB_PASSWORD_DIR}/{DB_HOST}_{DB_PORT}_{DB_USER}.pwd
+## Format: {<profile>.DB_PASSWORD_DIR}/{DB_HOST}_{DB_PORT}_{DB_USER}.pwd
 ## Usage: path="$(db_password_file)"
 db_password_file() {
   local dir
-  dir="$(get_prop "DB_PASSWORD_DIR")"
+  dir="$(get_prop "${DB_PROFILE}.DB_PASSWORD_DIR")"
   [[ -z "$dir" ]] && dir="./etc/local/pwd"
   printf '%s/%s_%s_%s.pwd' "$dir" "$DB_HOST" "$DB_PORT" "$DB_USER"
 }

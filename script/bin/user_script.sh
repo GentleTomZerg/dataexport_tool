@@ -37,10 +37,10 @@ main() {
   ROOT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
   # Default locations (edit here if you keep configs elsewhere).
-  # DB_CONFIG="$ROOT_DIR/etc/local/env.properties"
-  # JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_jobs.properties"
-  DB_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
-  JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
+  DB_CONFIG="$ROOT_DIR/etc/local/env.properties"
+  JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  # DB_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
+  # JOBS_CONFIG="$ROOT_DIR/etc/local/config/export_db_examples.properties"
 
   FAKE_MYSQL=1
 
@@ -61,7 +61,8 @@ FAKE
     --db-config "$DB_CONFIG" \
     --jobs-config "$JOBS_CONFIG" \
     --date "$batch_date" \
-    --execute
+    --jobs var_expansion
+  # --execute
 }
 
 main "$@"

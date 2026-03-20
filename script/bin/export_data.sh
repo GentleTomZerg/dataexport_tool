@@ -18,10 +18,10 @@ source "$ROOT_DIR/lib/sql_exec.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  export_data.sh --db-config file --jobs-config file [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
+  export_data.sh --db-config file --jobs-config file [--env-config file] [--job name|--jobs a,b] [--date YYYY-MM-DD] [--execute]
 
 Environment:
-  (none)
+  ENV_* values can be loaded from --env-config and are exported for config expansion.
 
 Notes:
   - Requires bash and GNU date (uses `date -d` for relative date math).
@@ -34,6 +34,7 @@ EOF
 parse_args() {
   DB_CONFIG=""
   JOBS_CONFIG=""
+  ENV_CONFIG=""
   ACTIVE_DB_PROFILE=""
   JOBS_ARG=""
   RUN_DATE=""
@@ -48,6 +49,10 @@ parse_args() {
       ;;
     --jobs-config)
       JOBS_CONFIG="$2"
+      shift 2
+      ;;
+    --env-config)
+      ENV_CONFIG="$2"
       shift 2
       ;;
     --job)
@@ -113,6 +118,21 @@ load_db_properties() {
 load_job_config_file() {
   # Uses lib/job_config.sh which sources properties internally.
   load_properties "$JOBS_CONFIG"
+}
+
+load_env_properties() {
+  local key
+
+  if [[ -z "$ENV_CONFIG" ]]; then
+    return 0
+  fi
+
+  # Load ENV_* values into PROPS, then export them for config expansion.
+  load_properties "$ENV_CONFIG"
+  while IFS= read -r key; do
+    [[ "$key" == ENV_* ]] || continue
+    export "$key=$(get_prop "$key")"
+  done < <(list_props_by_prefix "ENV_")
 }
 
 validate_job_bundle() {
@@ -187,6 +207,8 @@ run_jobs() {
     echo "DB_TYPE=$DB_TYPE"
     echo "DB_CONFIG=$DB_CONFIG"
     echo "JOBS_CONFIG=$JOBS_CONFIG"
+    echo "DB_PASSWORD_DIR=$(get_prop "${ACTIVE_DB_PROFILE}.DB_PASSWORD_DIR")"
+    echo "DB_PASSWORD_KEY_FILE=$DB_PASSWORD_KEY_FILE"
     echo "TABLE=$JOB_TABLE"
     echo "SQL=$SQL"
     echo "EXPORT_FILE=${JOB_EXPORT_FILE:-}"
@@ -248,6 +270,7 @@ main() {
   fi
   require_args
   init_runtime_dates "$RUN_DATE"
+  load_env_properties
   load_db_properties
   load_job_config_file
   resolve_jobs

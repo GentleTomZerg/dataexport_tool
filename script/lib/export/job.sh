@@ -22,6 +22,7 @@ load_export_job() {
   local props_name="$1"
   local job_name="$2"
   local out_name="$3"
+  local emit_errors="${4:-true}"
   local -n _out="$out_name"
   local prefix="job.${job_name}."
   local split_key split_col split_value chunk_size chunks extra col
@@ -36,7 +37,6 @@ load_export_job() {
   _out[export_file]="$(props_get "$props_name" "${prefix}EXPORT_FILE")"
   _out[field_separator]="$(props_get "$props_name" "${prefix}FIELD_SEPARATOR")"
   _out[line_terminator]="$(props_get "$props_name" "${prefix}LINE_TERMINATOR")"
-  _out[groups]="$(props_get "$props_name" "${prefix}GROUPS")"
   _out[compress_enabled]="$(props_get "$props_name" "${prefix}COMPRESS.ENABLED")"
   _out[compress_mode]="$(props_get "$props_name" "${prefix}COMPRESS.MODE")"
   _out[compress_overwrite]="$(props_get "$props_name" "${prefix}COMPRESS.OVERWRITE")"
@@ -59,7 +59,9 @@ load_export_job() {
   _out[splits]=""
 
   if [[ -z "${_out[db_profile]}" || -z "${_out[table]}" || -z "${_out[columns]}" ]]; then
-    printf 'ERROR: invalid job %s missing required fields\n' "$job_name" >&2
+    if [[ "$emit_errors" == "true" ]]; then
+      printf 'ERROR: invalid job %s missing required fields\n' "$job_name" >&2
+    fi
     return 1
   fi
 
@@ -77,15 +79,21 @@ load_export_job() {
     chunks="$(trim "${chunks:-}")"
 
     if [[ -z "$chunk_size" || -z "$chunks" || -n "${extra:-}" ]]; then
-      printf 'ERROR: invalid split config for job %s column %s\n' "$job_name" "$split_col" >&2
+      if [[ "$emit_errors" == "true" ]]; then
+        printf 'ERROR: invalid split config for job %s column %s\n' "$job_name" "$split_col" >&2
+      fi
       return 1
     fi
     if [[ ! "$chunk_size" =~ ^[0-9]+$ || ! "$chunks" =~ ^[0-9]+$ || "$chunk_size" -le 0 || "$chunks" -le 0 ]]; then
-      printf 'ERROR: invalid split numbers for job %s column %s\n' "$job_name" "$split_col" >&2
+      if [[ "$emit_errors" == "true" ]]; then
+        printf 'ERROR: invalid split numbers for job %s column %s\n' "$job_name" "$split_col" >&2
+      fi
       return 1
     fi
     if [[ -z "${columns_seen[$split_col]:-}" ]]; then
-      printf 'ERROR: split column %s is not present in COLUMNS for job %s\n' "$split_col" "$job_name" >&2
+      if [[ "$emit_errors" == "true" ]]; then
+        printf 'ERROR: split column %s is not present in COLUMNS for job %s\n' "$split_col" "$job_name" >&2
+      fi
       return 1
     fi
 

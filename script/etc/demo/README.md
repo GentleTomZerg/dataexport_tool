@@ -23,7 +23,7 @@ bash script/bin/exportctl plan \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
   --date 2026-03-17 \
-  users group:daily group:broken
+  users article_body invalid_unknown_profile
 
 bash script/bin/demo_exportctl.sh
 ```

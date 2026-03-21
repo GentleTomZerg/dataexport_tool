@@ -29,7 +29,7 @@ Usage:
   exportctl password decode --password-file FILE --key-file FILE
 
 Selectors:
-  users orders group:daily
+  users orders
 
 Exit codes:
   1 only for invalid CLI arguments.
@@ -56,6 +56,10 @@ print_plan() {
 print_job_header() {
   local job_name="$1"
   printf '== Job: %s ==\n' "$job_name"
+}
+
+print_validate_ok() {
+  printf 'STATUS=OK\n\n'
 }
 
 load_all_properties() {
@@ -86,12 +90,20 @@ process_job() {
   fi
 
   plan[sql]="$(render_select_sql plan)"
-  print_plan plan
 
-  if [[ "$CLI_CMD" == "validate" || "$CLI_CMD" == "plan" ]]; then
+  if [[ "$CLI_CMD" == "validate" ]]; then
+    print_validate_ok
     summary_mark_ok "$summary_name" "$job_name"
     return 0
   fi
+
+  if [[ "$CLI_CMD" == "plan" ]]; then
+    print_plan plan
+    summary_mark_ok "$summary_name" "$job_name"
+    return 0
+  fi
+
+  print_plan plan
 
   if ! execute_plan_export plan profile; then
     log_job_error "$job_name" "stage=export reason=db export failed"
@@ -138,19 +150,19 @@ run_export_command() {
 
 run_password_command() {
   case "$CLI_SUBCMD" in
-    encode)
-      local -A props=()
-      local -A profile=()
-      load_props_from_file "$CLI_DB_CONFIG" props
-      load_export_profile props "$CLI_DB_PROFILE" profile || return 0
-      profile[password_key_file]="$CLI_KEY_FILE"
-      write_encrypted_password "$CLI_PASSWORD" "$(profile_password_file props "$CLI_DB_PROFILE" profile)" profile
-      ;;
-    decode)
-      local -A profile=()
-      profile[password_key_file]="$CLI_KEY_FILE"
-      decrypt_password_file "$CLI_PASSWORD_FILE" profile
-      ;;
+  encode)
+    local -A props=()
+    local -A profile=()
+    load_props_from_file "$CLI_DB_CONFIG" props
+    load_export_profile props "$CLI_DB_PROFILE" profile || return 0
+    profile[password_key_file]="$CLI_KEY_FILE"
+    write_encrypted_password "$CLI_PASSWORD" "$(profile_password_file props "$CLI_DB_PROFILE" profile)" profile
+    ;;
+  decode)
+    local -A profile=()
+    profile[password_key_file]="$CLI_KEY_FILE"
+    decrypt_password_file "$CLI_PASSWORD_FILE" profile
+    ;;
   esac
 }
 
@@ -161,16 +173,16 @@ main() {
   fi
 
   case "$CLI_CMD" in
-    validate|plan|run)
-      run_export_command
-      ;;
-    password)
-      run_password_command
-      ;;
-    *)
-      usage >&2
-      exit 1
-      ;;
+  validate | plan | run)
+    run_export_command
+    ;;
+  password)
+    run_password_command
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
   esac
 }
 

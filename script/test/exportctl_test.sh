@@ -45,6 +45,16 @@ assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
 assert_contains "STATUS=FAILED" "$plan_output" "failed job status printed"
 assert_contains "JOB_FAIL name=bad" "$plan_output" "bad job logged"
 assert_contains "SUMMARY total=2 ok=1 failed=1" "$plan_output" "summary counts"
+assert_contains "SQL=SELECT id,name FROM users WHERE status = 'active'" "$plan_output" "plan prints sql"
+
+validate_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" validate --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 2>&1)"
+assert_contains "== Job: users ==" "$validate_output" "validate includes users"
+assert_contains "STATUS=OK" "$validate_output" "validate prints ok status"
+assert_contains "STATUS=FAILED" "$validate_output" "validate prints failed status"
+assert_true "[[ \"$validate_output\" != *\"SQL=\"* ]]" "validate should not print sql"
+
+unknown_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 users missing_job 2>&1)"
+assert_contains "ERROR: unknown selector missing_job" "$unknown_output" "unknown selector logged"
 
 run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 users 2>&1)"
 assert_contains "JOB_OK name=users" "$run_output" "run success log"

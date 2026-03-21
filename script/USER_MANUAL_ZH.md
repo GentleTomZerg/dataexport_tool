@@ -35,8 +35,9 @@ exportctl password decode ...
 
 - `validate`
   读取配置、展开变量、解析 job、构建计划，但不执行数据库导出。
+  只输出 job 是否可构建成功，不打印完整 SQL 细节。
 - `plan`
-  与 `validate` 类似，但会明确打印每个 job 的 SQL 和导出目标。
+  与 `validate` 类似，但会明确打印每个 job 的 SQL、导出目标和解析后的细节。
 - `run`
   真正执行数据库导出，并触发压缩、传输等后处理。
 - `password encode`
@@ -266,18 +267,15 @@ job.audit.EXPORT_FILE=./archive/audit_${EXPORT_MONTH}.csv
 - 指定只运行哪些 job
 - 放在命令最后，作为位置参数
 
-支持两种 selector：
+当前只支持一种 selector：
 
 - 直接写 job 名称
-- `group:<group_name>`
 
 示例：
 
 ```bash
 bash script/bin/exportctl plan ... users
 bash script/bin/exportctl run ... users orders
-bash script/bin/exportctl run ... group:daily
-bash script/bin/exportctl run ... users group:daily
 ```
 
 #### 4.5.1 直接写 job 名
@@ -291,39 +289,6 @@ bash script/bin/exportctl run ... users
 表示：
 
 - 只运行 `job.users.*` 这一组配置
-
-#### 4.5.2 `group:<name>`
-
-前提：
-
-- job 配置里定义了 `GROUPS`
-
-例如：
-
-```properties
-job.users.GROUPS=daily,core
-job.finance.GROUPS=finance,daily
-```
-
-再运行：
-
-```bash
-bash script/bin/exportctl plan ... group:daily
-```
-
-表示：
-
-- 运行所有 `GROUPS` 里包含 `daily` 的 job
-
-如果混用：
-
-```bash
-bash script/bin/exportctl run ... users group:daily
-```
-
-表示：
-
-- 结果是两者的并集
 
 如果 selector 不存在：
 
@@ -490,8 +455,6 @@ job.users.WHERE=status = 'active'
   导出目标文件路径，可使用变量
 - `job.<name>.WHERE`
   原样 SQL 条件，不做结构化解析
-- `job.<name>.GROUPS`
-  逗号分隔的 group 名，用于 `group:<name>` selector
 - `job.<name>.SPLIT.<column>`
   列拆分配置，格式是 `<chunk_size>,<chunks>`
 
@@ -738,6 +701,7 @@ bash script/bin/exportctl validate \
 适用场景：
 
 - 改完配置后先检查哪些 job 会失败
+- 只想确认配置能否通过，不关心 SQL 明细
 
 ### 8.2 只看某几个 job 的 SQL
 
@@ -754,23 +718,9 @@ bash script/bin/exportctl plan \
 
 - 核对最终 SQL
 - 核对最终输出文件路径
+- 核对 split 列是否已被正确展开为 `SUBSTRING(...)`
 
-### 8.3 按 group 选择 job
-
-```bash
-bash script/bin/exportctl plan \
-  --db-config script/etc/demo/db.properties \
-  --jobs-config script/etc/demo/jobs.properties \
-  --env-config script/etc/demo/env.properties \
-  --date 2026-03-17 \
-  group:daily
-```
-
-适用场景：
-
-- 按批次、业务域、日常/每月任务做分组执行
-
-### 8.4 混合 selector
+### 8.3 混合 selector
 
 ```bash
 bash script/bin/exportctl plan \
@@ -778,16 +728,16 @@ bash script/bin/exportctl plan \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
   --date 2026-03-17 \
-  users group:broken missing_job
+  users invalid_unknown_profile missing_job
 ```
 
 你会看到：
 
 - `users` 正常输出
-- `group:broken` 里的坏 job 输出 `JOB_FAIL`
+- `invalid_unknown_profile` 输出 `JOB_FAIL`
 - `missing_job` 输出 unknown selector 错误
 
-### 8.5 真正执行导出
+### 8.4 真正执行导出
 
 ```bash
 bash script/bin/exportctl run \
@@ -803,7 +753,7 @@ bash script/bin/exportctl run \
 - 真正导出并生成文件
 - 需要结合本机 `mysql` 或 `psql` 客户端使用
 
-### 8.6 生成密码文件
+### 8.5 生成密码文件
 
 ```bash
 bash script/bin/exportctl password encode \
@@ -817,7 +767,7 @@ bash script/bin/exportctl password encode \
 
 - 首次准备数据库密码文件
 
-### 8.7 解密查看密码文件
+### 8.6 解密查看密码文件
 
 ```bash
 bash script/bin/exportctl password decode \

@@ -34,13 +34,13 @@ PATH="$FAKE_BIN:$PATH" bash "$CTL" validate \
   --date 2026-03-17
 
 echo
-echo "== plan daily + broken + unknown selector =="
+echo "== plan explicit jobs + invalid selector =="
 PATH="$FAKE_BIN:$PATH" bash "$CTL" plan \
   --db-config "$DEMO_DIR/db.properties" \
   --jobs-config "$DEMO_DIR/jobs.properties" \
   --env-config "$DEMO_DIR/env.properties" \
   --date 2026-03-17 \
-  group:daily group:broken missing_job
+  users article_body invalid_unknown_profile missing_job
 
 echo
 echo "== run selected valid jobs =="

@@ -31,12 +31,3 @@ assert_true() {
     exit 1
   fi
 }
-
-assert_fail() {
-  local msg="$1"
-  shift
-  if ("$@") >/dev/null 2>&1; then
-    echo "FAIL: $msg" >&2
-    exit 1
-  fi
-}

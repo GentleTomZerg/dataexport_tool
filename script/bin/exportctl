@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$ROOT_DIR/lib/common/strict.sh"
+source "$ROOT_DIR/lib/common/log.sh"
+source "$ROOT_DIR/lib/common/args.sh"
+source "$ROOT_DIR/lib/config/properties.sh"
+source "$ROOT_DIR/lib/config/runtime.sh"
+source "$ROOT_DIR/lib/export/profile.sh"
+source "$ROOT_DIR/lib/export/job.sh"
+source "$ROOT_DIR/lib/export/selector.sh"
+source "$ROOT_DIR/lib/export/plan.sh"
+source "$ROOT_DIR/lib/sql/render.sh"
+source "$ROOT_DIR/lib/exec/db.sh"
+source "$ROOT_DIR/lib/artifact/pipeline.sh"
+source "$ROOT_DIR/lib/export/summary.sh"
+source "$ROOT_DIR/lib/security/crypto.sh"
+
+setup_shell
+
+usage() {
+  cat <<'EOF'
+Usage:
+  exportctl validate --db-config FILE --jobs-config FILE [--env-config FILE] [job selectors...]
+  exportctl plan --db-config FILE --jobs-config FILE [--env-config FILE] [--date YYYY-MM-DD] [job selectors...]
+  exportctl run --db-config FILE --jobs-config FILE [--env-config FILE] [--date YYYY-MM-DD] [job selectors...]
+  exportctl password encode --db-config FILE --db-profile NAME --password VALUE --key-file FILE
+  exportctl password decode --password-file FILE --key-file FILE
+
+Selectors:
+  users orders group:daily
+
+Exit codes:
+  1 only for invalid CLI arguments.
+  0 for all runtime outcomes; failures are logged and summarized.
+EOF
+}
+
+print_plan() {
+  local plan_name="$1"
+  local -n _plan="$plan_name"
+  printf 'DB_PROFILE=%s\n' "${_plan[db_profile]}"
+  printf 'DB_TYPE=%s\n' "${_plan[db_type]}"
+  printf 'DB_HOST=%s\n' "${_plan[db_host]}"
+  printf 'DB_PORT=%s\n' "${_plan[db_port]}"
+  printf 'TABLE=%s\n' "${_plan[table]}"
+  printf 'COLUMNS=%s\n' "${_plan[columns]}"
+  printf 'EXPORT_FILE=%s\n' "${_plan[export_file]}"
+  printf 'FIELD_SEPARATOR=%s\n' "${_plan[field_separator]}"
+  printf 'LINE_TERMINATOR=%s\n' "${_plan[line_terminator]}"
+  printf 'SQL=%s\n' "${_plan[sql]}"
+  printf '\n'
+}
+
+print_job_header() {
+  local job_name="$1"
+  printf '== Job: %s ==\n' "$job_name"
+}
+
+load_all_properties() {
+  local props_name="$1"
+  local -n _props="$props_name"
+
+  [[ -n "${CLI_ENV_CONFIG:-}" ]] && load_props_from_file "$CLI_ENV_CONFIG" "$props_name"
+  load_props_from_file "$CLI_DB_CONFIG" "$props_name"
+  load_props_from_file "$CLI_JOBS_CONFIG" "$props_name"
+}
+
+process_job() {
+  local props_name="$1"
+  local runtime_name="$2"
+  local job_name="$3"
+  local summary_name="$4"
+  local -n _summary="$summary_name"
+  local -A profile=()
+  local -A job=()
+  local -A plan=()
+
+  print_job_header "$job_name"
+  if ! build_export_plan "$props_name" "$runtime_name" "$job_name" profile job plan; then
+    printf 'STATUS=FAILED\n\n'
+    log_job_error "$job_name" "stage=plan reason=plan build failed"
+    summary_mark_failed "$summary_name" "$job_name"
+    return 0
+  fi
+
+  plan[sql]="$(render_select_sql plan)"
+  print_plan plan
+
+  if [[ "$CLI_CMD" == "validate" || "$CLI_CMD" == "plan" ]]; then
+    summary_mark_ok "$summary_name" "$job_name"
+    return 0
+  fi
+
+  if ! execute_plan_export plan profile; then
+    log_job_error "$job_name" "stage=export reason=db export failed"
+    summary_mark_failed "$summary_name" "$job_name"
+    return 0
+  fi
+
+  if ! run_artifact_pipeline plan; then
+    log_job_error "$job_name" "stage=artifact reason=post export pipeline failed"
+    summary_mark_failed "$summary_name" "$job_name"
+    return 0
+  fi
+
+  summary_mark_ok "$summary_name" "$job_name"
+}
+
+run_export_command() {
+  local -A props=()
+  local -A runtime=()
+  local -A summary=()
+  local -a selected_jobs=()
+  local job_name
+
+  init_runtime_context "${CLI_DATE:-}" runtime
+  load_all_properties props
+  resolve_job_selectors props CLI_SELECTORS selected_jobs
+  summary_init summary
+
+  if [[ "${#selected_jobs[@]}" -eq 0 ]]; then
+    log_error "no runnable jobs resolved"
+    summary_print summary
+    return 0
+  fi
+
+  print_runtime_context runtime
+
+  for job_name in "${selected_jobs[@]}"; do
+    process_job props runtime "$job_name" summary
+  done
+
+  summary_print summary
+  return 0
+}
+
+run_password_command() {
+  case "$CLI_SUBCMD" in
+    encode)
+      local -A props=()
+      local -A profile=()
+      load_props_from_file "$CLI_DB_CONFIG" props
+      load_export_profile props "$CLI_DB_PROFILE" profile || return 0
+      profile[password_key_file]="$CLI_KEY_FILE"
+      write_encrypted_password "$CLI_PASSWORD" "$(profile_password_file props "$CLI_DB_PROFILE" profile)" profile
+      ;;
+    decode)
+      local -A profile=()
+      profile[password_key_file]="$CLI_KEY_FILE"
+      decrypt_password_file "$CLI_PASSWORD_FILE" profile
+      ;;
+  esac
+}
+
+main() {
+  if ! parse_exportctl_args "$@"; then
+    usage >&2
+    exit 1
+  fi
+
+  case "$CLI_CMD" in
+    validate|plan|run)
+      run_export_command
+      ;;
+    password)
+      run_password_command
+      ;;
+    *)
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

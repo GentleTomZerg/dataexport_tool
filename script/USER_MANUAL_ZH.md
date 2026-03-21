@@ -1,200 +1,874 @@
-# 数据导出工具使用手册（中文）
+# 数据导出工具使用手册
 
-## 1. export_data.sh 使用方法
+本文说明 `script/bin/exportctl` 的所有参数、参数对应的配置文件含义、常见使用方式，以及完整示例。
 
-### 基本用法
+## 1. 工具目标
+
+这个项目的目标是：
+
+- 从 `.properties` 文件读取数据库配置和导出任务配置
+- 根据运行日期展开 `${EXPORT_DATE}`、`${YESTERDAY}` 等变量
+- 为每个 job 生成 SQL
+- 在 `run` 模式下执行导出
+- 导出后可选压缩、复制或移动文件
+- 即使部分 job 失败，也尽量继续执行其他 job
+
+主入口：
 
 ```bash
-bash bin/export_data.sh \
-  --db-config etc/local/config/export_jobs.properties \
-  --jobs-config etc/local/config/export_jobs.properties \
-  --env-config etc/local/env.properties \
+bash script/bin/exportctl ...
+```
+
+## 2. 命令总览
+
+`exportctl` 支持四类命令：
+
+```bash
+exportctl validate ...
+exportctl plan ...
+exportctl run ...
+exportctl password encode ...
+exportctl password decode ...
+```
+
+它们的区别：
+
+- `validate`
+  读取配置、展开变量、解析 job、构建计划，但不执行数据库导出。
+- `plan`
+  与 `validate` 类似，但会明确打印每个 job 的 SQL 和导出目标。
+- `run`
+  真正执行数据库导出，并触发压缩、传输等后处理。
+- `password encode`
+  按 profile 规则生成加密密码文件。
+- `password decode`
+  解密已有密码文件，打印明文。
+
+## 3. 通用命令格式
+
+### 3.1 `validate`
+
+```bash
+bash script/bin/exportctl validate \
+  --db-config FILE \
+  --jobs-config FILE \
+  [--env-config FILE] \
+  [--date YYYY-MM-DD] \
+  [job selectors...]
+```
+
+### 3.2 `plan`
+
+```bash
+bash script/bin/exportctl plan \
+  --db-config FILE \
+  --jobs-config FILE \
+  [--env-config FILE] \
+  [--date YYYY-MM-DD] \
+  [job selectors...]
+```
+
+### 3.3 `run`
+
+```bash
+bash script/bin/exportctl run \
+  --db-config FILE \
+  --jobs-config FILE \
+  [--env-config FILE] \
+  [--date YYYY-MM-DD] \
+  [job selectors...]
+```
+
+### 3.4 `password encode`
+
+```bash
+bash script/bin/exportctl password encode \
+  --db-config FILE \
+  --db-profile PROFILE \
+  --password VALUE \
+  --key-file FILE
+```
+
+### 3.5 `password decode`
+
+```bash
+bash script/bin/exportctl password decode \
+  --password-file FILE \
+  --key-file FILE
+```
+
+## 4. 所有参数的详细说明
+
+下面按参数逐个说明。
+
+### 4.1 `--db-config FILE`
+
+作用：
+
+- 指定数据库 profile 配置文件
+- 文件里通常定义 `primary.DB_HOST`、`primary.DB_PORT` 这一类键
+
+它指向什么：
+
+- 一个 `.properties` 文件
+- 里面以 `<profile>.DB_...` 的形式描述数据库连接信息
+
+典型内容：
+
+```properties
+primary.DB_HOST=localhost
+primary.DB_PORT=3306
+primary.DB_NAME=demo_db
+primary.DB_USER=demo_user
+primary.DB_TYPE=mysql
+primary.DB_PASSWORD_DIR=./script/etc/demo/pwd
+primary.DB_PASSWORD_KEY_FILE=./script/etc/demo/pwd/key_file
+```
+
+使用场景：
+
+- `job.users.DB_PROFILE=primary` 时，程序会去 `db-config` 里查 `primary` 这个 profile
+
+注意：
+
+- `--db-config` 是 `validate`、`plan`、`run` 的必填参数
+- 如果参数本身缺失，命令行会直接退出 `1`
+- 如果文件路径写了但文件不存在，会记录错误，但进程仍按项目约定返回 `0`
+
+### 4.2 `--jobs-config FILE`
+
+作用：
+
+- 指定 job 配置文件
+- 文件里定义每个导出任务的表、列、SQL 条件、输出文件等
+
+它指向什么：
+
+- 一个 `.properties` 文件
+- 里面以 `job.<name>.*` 的形式描述每个 job
+
+典型内容：
+
+```properties
+job.users.DB_PROFILE=primary
+job.users.TABLE_NAME=users
+job.users.COLUMNS=id,name,email
+job.users.EXPORT_FILE=./tmp/users_${EXPORT_DATE}.csv
+job.users.WHERE=status = 'active'
+```
+
+使用场景：
+
+- `exportctl` 会遍历这个文件里的所有 `job.<name>.*`
+- 如果命令行指定了 selector，只执行匹配到的 job
+
+注意：
+
+- `--jobs-config` 是 `validate`、`plan`、`run` 的必填参数
+
+### 4.3 `--env-config FILE`
+
+作用：
+
+- 指定环境变量配置文件
+- 里面通常是 `ENV_` 开头的路径变量
+
+它指向什么：
+
+- 一个 `.properties` 文件
+- 内容一般类似：
+
+```properties
+ENV_EXPORT_ROOT=./tmp/demo_exports
+ENV_TRANSFER_ROOT=./tmp/demo_transfer
+ENV_ARCHIVE_ROOT=./tmp/demo_archive
+```
+
+它怎么用：
+
+- 如果 job 配置里写了 `${ENV_EXPORT_ROOT}`，程序会先读取 `--env-config`
+- 然后把变量展开到最终值
+
+例如：
+
+```properties
+job.users.EXPORT_FILE=${ENV_EXPORT_ROOT}/users_${EXPORT_DATE}.csv
+```
+
+展开后可能变成：
+
+```text
+./tmp/demo_exports/users_2026-03-17.csv
+```
+
+注意：
+
+- `--env-config` 是可选参数
+- 如果 job 里完全没有引用 `ENV_*` 变量，可以不传
+
+### 4.4 `--date YYYY-MM-DD`
+
+作用：
+
+- 指定本次运行的业务日期
+- 它不会改系统时间，只用于变量展开
+
+格式要求：
+
+- 必须是 `YYYY-MM-DD`
+- 例如 `2026-03-17`
+
+它会影响哪些变量：
+
+- `EXPORT_DATE`
+- `TODAY`
+- `YESTERDAY`
+- `EXPORT_MONTH`
+- `MONTH_START`
+- `MONTH_END`
+
+例如传入：
+
+```bash
+--date 2026-03-17
+```
+
+则运行时变量通常会变成：
+
+```text
+EXPORT_DATE=2026-03-17
+TODAY=2026-03-17
+YESTERDAY=2026-03-16
+EXPORT_MONTH=2026-03
+MONTH_START=2026-03-01
+MONTH_END=2026-03-31
+```
+
+典型使用：
+
+```properties
+job.daily_orders.WHERE=created_at BETWEEN '${YESTERDAY}' AND '${TODAY}'
+job.audit.EXPORT_FILE=./archive/audit_${EXPORT_MONTH}.csv
+```
+
+如果不传：
+
+- 默认使用当天日期
+
+注意：
+
+- 日期格式写错属于命令行参数错误，进程会退出 `1`
+
+### 4.5 `job selectors...`
+
+作用：
+
+- 指定只运行哪些 job
+- 放在命令最后，作为位置参数
+
+支持两种 selector：
+
+- 直接写 job 名称
+- `group:<group_name>`
+
+示例：
+
+```bash
+bash script/bin/exportctl plan ... users
+bash script/bin/exportctl run ... users orders
+bash script/bin/exportctl run ... group:daily
+bash script/bin/exportctl run ... users group:daily
+```
+
+#### 4.5.1 直接写 job 名
+
+例如：
+
+```bash
+bash script/bin/exportctl run ... users
+```
+
+表示：
+
+- 只运行 `job.users.*` 这一组配置
+
+#### 4.5.2 `group:<name>`
+
+前提：
+
+- job 配置里定义了 `GROUPS`
+
+例如：
+
+```properties
+job.users.GROUPS=daily,core
+job.finance.GROUPS=finance,daily
+```
+
+再运行：
+
+```bash
+bash script/bin/exportctl plan ... group:daily
+```
+
+表示：
+
+- 运行所有 `GROUPS` 里包含 `daily` 的 job
+
+如果混用：
+
+```bash
+bash script/bin/exportctl run ... users group:daily
+```
+
+表示：
+
+- 结果是两者的并集
+
+如果 selector 不存在：
+
+- 只记录错误日志
+- 不会因为 unknown selector 直接退出
+
+### 4.6 `--db-profile PROFILE`
+
+只用于：
+
+- `password encode`
+
+作用：
+
+- 指定要使用哪个 DB profile 生成密码文件
+
+例如：
+
+```bash
+bash script/bin/exportctl password encode \
+  --db-config script/etc/demo/db.properties \
+  --db-profile primary \
+  --password 'secret123' \
+  --key-file script/etc/demo/pwd/key_file
+```
+
+程序会根据 `primary` profile 的 host、port、user、password_dir 拼出密码文件名。
+
+例如可能写入：
+
+```text
+script/etc/demo/pwd/localhost_3306_demo_user.pwd
+```
+
+### 4.7 `--password VALUE`
+
+只用于：
+
+- `password encode`
+
+作用：
+
+- 指定要加密写入密码文件的明文密码
+
+注意：
+
+- 这个参数会直接出现在 shell 历史中
+- 如果你在生产环境操作，应评估 shell history 风险
+
+### 4.8 `--key-file FILE`
+
+用于：
+
+- `password encode`
+- `password decode`
+
+作用：
+
+- 指定 OpenSSL 使用的密钥文件路径
+
+它指向什么：
+
+- 一个已有的本地文件
+
+使用方式：
+
+- encode 时，用它加密
+- decode 时，用它解密
+
+### 4.9 `--password-file FILE`
+
+只用于：
+
+- `password decode`
+
+作用：
+
+- 指定一个已经存在的 `.pwd` 加密密码文件
+
+例如：
+
+```bash
+bash script/bin/exportctl password decode \
+  --password-file script/etc/demo/pwd/localhost_3306_demo_user.pwd \
+  --key-file script/etc/demo/pwd/key_file
+```
+
+## 5. 配置文件写法详解
+
+### 5.1 DB profile 配置
+
+格式：
+
+```properties
+<profile>.DB_HOST=...
+<profile>.DB_PORT=...
+<profile>.DB_NAME=...
+<profile>.DB_USER=...
+<profile>.DB_TYPE=mysql|postgres
+<profile>.DB_PASSWORD_DIR=...
+<profile>.DB_PASSWORD_KEY_FILE=...
+```
+
+示例：
+
+```properties
+primary.DB_HOST=localhost
+primary.DB_PORT=3306
+primary.DB_NAME=demo_db
+primary.DB_USER=demo_user
+primary.DB_TYPE=mysql
+primary.DB_PASSWORD_DIR=./script/etc/demo/pwd
+primary.DB_PASSWORD_KEY_FILE=./script/etc/demo/pwd/key_file
+```
+
+字段解释：
+
+- `DB_HOST`
+  数据库主机名
+- `DB_PORT`
+  数据库端口
+- `DB_NAME`
+  数据库名
+- `DB_USER`
+  登录用户名
+- `DB_TYPE`
+  当前只支持 `mysql` 和 `postgres`
+- `DB_PASSWORD_DIR`
+  密码文件目录
+- `DB_PASSWORD_KEY_FILE`
+  密钥文件路径
+
+### 5.2 Job 配置
+
+格式：
+
+```properties
+job.<name>.DB_PROFILE=...
+job.<name>.TABLE_NAME=...
+job.<name>.COLUMNS=...
+job.<name>.EXPORT_FILE=...
+job.<name>.WHERE=...
+```
+
+最小可用示例：
+
+```properties
+job.users.DB_PROFILE=primary
+job.users.TABLE_NAME=users
+job.users.COLUMNS=id,name,email
+job.users.EXPORT_FILE=./tmp/users_${EXPORT_DATE}.csv
+job.users.WHERE=status = 'active'
+```
+
+字段解释：
+
+- `job.<name>.DB_PROFILE`
+  指向 DB profile 名称，例如 `primary`
+- `job.<name>.TABLE_NAME`
+  最终 SQL 里的表名
+- `job.<name>.COLUMNS`
+  最终 SQL 里的列清单，原样拼到 `SELECT`
+- `job.<name>.EXPORT_FILE`
+  导出目标文件路径，可使用变量
+- `job.<name>.WHERE`
+  原样 SQL 条件，不做结构化解析
+- `job.<name>.GROUPS`
+  逗号分隔的 group 名，用于 `group:<name>` selector
+- `job.<name>.SPLIT.<column>`
+  列拆分配置，格式是 `<chunk_size>,<chunks>`
+
+注意：
+
+- 当前设计明确保留 RAW `WHERE`
+- 也就是你写什么，最终 SQL 就拼什么
+- 因此这里需要你自己保证 SQL 条件合法
+
+### 5.3 列拆分配置
+
+这是你刚提到的能力，当前版本已经恢复。
+
+使用方式：
+
+```properties
+job.article_body.DB_PROFILE=primary
+job.article_body.TABLE_NAME=articles
+job.article_body.COLUMNS=id,title,body,created_at
+job.article_body.EXPORT_FILE=./tmp/articles_${EXPORT_DATE}.csv
+job.article_body.WHERE=created_at >= '${MONTH_START}'
+job.article_body.SPLIT.body=4000,3
+```
+
+含义：
+
+- 对 `body` 这一列做拆分
+- 每段长度 `4000`
+- 总共拆成 `3` 段
+
+当前实现方式：
+
+- 只在 `mysql` 类型下生效
+- SQL 会把原列改写成多个 `SUBSTRING(...) AS ...`
+
+上面的配置最终会生成类似 SQL：
+
+```sql
+SELECT id,title,
+SUBSTRING(body, 1, 4000) AS body_part1,
+SUBSTRING(body, 4001, 4000) AS body_part2,
+SUBSTRING(body, 8001, 4000) AS body_part3,
+created_at
+FROM articles
+WHERE created_at >= '2026-03-01'
+```
+
+约束：
+
+- 被拆分的列必须已经出现在 `COLUMNS` 中
+- `chunk_size` 和 `chunks` 必须都是正整数
+- 当前不会自动对 postgres 做同样改写
+
+### 5.4 压缩配置
+
+可选字段：
+
+```properties
+job.audit.COMPRESS.ENABLED=true
+job.audit.COMPRESS.MODE=gz
+job.audit.COMPRESS.OVERWRITE=true
+job.audit.COMPRESS.REMOVE_ORIGINAL=false
+```
+
+字段解释：
+
+- `COMPRESS.ENABLED`
+  是否启用压缩，`true` 或 `false`
+- `COMPRESS.MODE`
+  压缩格式，当前支持 `gz`、`tar`、`tar.gz`、`tgz`
+- `COMPRESS.OVERWRITE`
+  如果目标压缩文件已存在，是否覆盖
+- `COMPRESS.REMOVE_ORIGINAL`
+  压缩成功后是否删除原始导出文件
+
+### 5.5 传输配置
+
+可选字段：
+
+```properties
+job.finance.TRANSFER.ENABLED=true
+job.finance.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
+job.finance.TRANSFER.MODE=copy
+job.finance.TRANSFER.OVERWRITE=true
+job.finance.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
+```
+
+字段解释：
+
+- `TRANSFER.ENABLED`
+  是否启用传输
+- `TRANSFER.DIR`
+  目标目录
+- `TRANSFER.MODE`
+  `copy` 或 `move`
+- `TRANSFER.OVERWRITE`
+  目标文件已存在时是否覆盖
+- `TRANSFER.RENAME`
+  目标文件名模板
+
+文件名模板支持：
+
+- `${JOB_NAME}`
+- `${EXPORT_DATE}`
+- `${BASENAME}`
+- `${EXT}`
+
+例如：
+
+```properties
+job.finance.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
+```
+
+如果原文件是 `finance_2026-03-17.csv`，则目标名可能变成：
+
+```text
+finance_2026-03-17.csv
+```
+
+## 6. 输出内容怎么理解
+
+### 6.1 Runtime 区块
+
+示例：
+
+```text
+== Runtime ==
+EXPORT_DATE=2026-03-17
+TODAY=2026-03-17
+YESTERDAY=2026-03-16
+EXPORT_MONTH=2026-03
+MONTH_START=2026-03-01
+MONTH_END=2026-03-31
+```
+
+含义：
+
+- 这是本次运行实际使用的日期变量
+
+### 6.2 Job 区块
+
+示例：
+
+```text
+== Job: users ==
+DB_PROFILE=primary
+DB_TYPE=mysql
+DB_HOST=localhost
+DB_PORT=3306
+TABLE=users
+COLUMNS=id,name,email
+EXPORT_FILE=./tmp/demo_exports/users_2026-03-17.csv
+FIELD_SEPARATOR=\t
+LINE_TERMINATOR=\n
+SQL=SELECT id,name,email FROM users WHERE status = 'active'
+```
+
+含义：
+
+- 显示这个 job 最终解析后的配置和 SQL
+
+### 6.3 成功日志
+
+示例：
+
+```text
+JOB_OK name=users stage=complete
+```
+
+含义：
+
+- 该 job 已完成当前命令要求的阶段
+
+### 6.4 失败日志
+
+示例：
+
+```text
+JOB_FAIL name=invalid_missing_profile stage=plan reason=plan build failed
+```
+
+含义：
+
+- 该 job 在 `plan` 阶段失败
+- 但流程仍会继续处理其他 job
+
+### 6.5 Summary
+
+示例：
+
+```text
+SUMMARY total=7 ok=5 failed=2
+FAILED_JOBS=invalid_missing_profile invalid_unknown_profile
+```
+
+含义：
+
+- 总共处理了 7 个 job
+- 其中 5 个成功，2 个失败
+
+## 7. 退出码规则
+
+项目当前约定：
+
+- 只有命令行参数错误时返回 `1`
+- 其他运行期错误一律记录日志，进程返回 `0`
+
+### 7.1 会返回 `1` 的情况
+
+例如：
+
+- 没传 `--db-config`
+- 没传 `--jobs-config`
+- `--date` 不是 `YYYY-MM-DD`
+- `password encode` 缺 `--db-profile`
+
+### 7.2 仍然返回 `0` 的情况
+
+例如：
+
+- 某个 job 缺失 `DB_PROFILE`
+- 某个 selector 不存在
+- 某个 job 对应 profile 不完整
+- 导出时数据库命令失败
+- 压缩或传输失败
+
+原因：
+
+- 当前设计要求尽量跑完整个批次
+- 失败通过日志和 summary 观察
+
+## 8. 常见使用示例
+
+### 8.1 检查所有 job 是否能解析
+
+```bash
+bash script/bin/exportctl validate \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
   --date 2026-03-17
 ```
 
-说明：
-- `--db-config` 与 `--jobs-config` 当前指向同一个文件（DB profile + jobs）。
-- `--env-config` 可选，仅当配置里使用 `ENV_*` 变量时需要。
-- 不加 `--execute` 时只打印 SQL，不执行导出。
+适用场景：
 
-### 常用参数
+- 改完配置后先检查哪些 job 会失败
 
-- `--db-config <file>`：DB profile 配置文件（必需）
-- `--jobs-config <file>`：Job 配置文件（必需）
-- `--env-config <file>`：ENV_* 变量文件（可选）
-- `--job <name>`：只跑单个 job
-- `--jobs <a,b>`：只跑指定 jobs
-- `--date <YYYY-MM-DD>`：运行日期（影响日期变量）
-- `--execute`：执行导出并生成文件
+### 8.2 只看某几个 job 的 SQL
 
-## 2. 配置文件写法
-
-### 2.1 `etc/local/env.properties`
-
-只允许 `ENV_*` 变量：
-
-```
-ENV_WORK_PATH=/nas/lens_scripts
-ENV_GTP_TEMP_PATH=/nas/gtpdata/temp
-ENV_EDP_OUT_PATH=/nas/gtpdata/edp/out
-ENV_EDP_IN_PATH=/nas/gtpdata/edp/in
+```bash
+bash script/bin/exportctl plan \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
+  --date 2026-03-17 \
+  users finance
 ```
 
-### 2.2 `etc/local/config/export_jobs.properties`
+适用场景：
 
-此文件同时包含 **DB profile** 和 **Job** 配置。
+- 核对最终 SQL
+- 核对最终输出文件路径
 
-#### DB profile（全部必填）
+### 8.3 按 group 选择 job
 
-```
-primary.DB_HOST=localhost
-primary.DB_PORT=3306
-primary.DB_NAME=example_db
-primary.DB_USER=example_user
-primary.DB_TYPE=mysql
-primary.DB_PASSWORD_DIR=./etc/local/pwd
-primary.DB_PASSWORD_KEY_FILE=./etc/local/pwd/key_file
-```
-
-必填项（每个 profile 都必须提供）：
-- `<profile>.DB_HOST`
-- `<profile>.DB_PORT`
-- `<profile>.DB_NAME`
-- `<profile>.DB_USER`
-- `<profile>.DB_TYPE`（`mysql` 或 `postgres`）
-- `<profile>.DB_PASSWORD_DIR`（加密密码文件目录）
-- `<profile>.DB_PASSWORD_KEY_FILE`（openssl 密钥文件路径）
-
-#### Job 配置（必填 + 可选）
-
-**必填**
-- `job.<name>.DB_PROFILE`
-- `job.<name>.TABLE_NAME`
-- `job.<name>.COLUMNS`
-
-**可选**
-- `job.<name>.EXPORT_FILE`（不执行时可省略）
-- `job.<name>.FIELD_SEPARATOR`（默认 `\t`）
-- `job.<name>.LINE_TERMINATOR`（默认 `\n`）
-- `job.<name>.FILTER.*`
-- `job.<name>.SPLIT.<col>=<chunk_size>,<chunks>`（MySQL）
-- `job.<name>.COMPRESS.*`
-- `job.<name>.TRANSFER.*`
-
-示例（包含常用功能覆盖）：
-
-```
-# 基础过滤
-job.users.DB_PROFILE=primary
-job.users.TABLE_NAME=users
-job.users.COLUMNS=id,name,email,created_at
-job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
-job.users.FIELD_SEPARATOR=|
-job.users.LINE_TERMINATOR=\n
-job.users.FILTER.status=active
-job.users.FILTER.created_at.op=>=
-job.users.FILTER.created_at.value=2024-01-01
-
-# BETWEEN
-job.events.DB_PROFILE=primary
-job.events.TABLE_NAME=events
-job.events.COLUMNS=id,type,created_at
-job.events.EXPORT_FILE=./exports/events_${EXPORT_DATE}.csv
-job.events.FILTER.created_at.op=BETWEEN
-job.events.FILTER.created_at.from=${EXPORT_DATE}
-job.events.FILTER.created_at.to=${EXPORT_DATE}
-
-# LIKE
-job.customers.DB_PROFILE=primary
-job.customers.TABLE_NAME=customers
-job.customers.COLUMNS=id,name,email,created_at
-job.customers.EXPORT_FILE=./exports/customers.csv
-job.customers.FILTER.name.op=LIKE
-job.customers.FILTER.name.value=%john%
-
-# TEXT 分片（MySQL）
-job.articles.DB_PROFILE=primary
-job.articles.TABLE_NAME=articles
-job.articles.COLUMNS=id,title,body,created_at
-job.articles.EXPORT_FILE=./exports/articles_${EXPORT_DATE}.csv
-job.articles.SPLIT.body=4000,3
-
-# 压缩 + 传输
-job.articles.COMPRESS.ENABLED=true
-job.articles.COMPRESS.MODE=gz
-job.articles.COMPRESS.OVERWRITE=true
-job.articles.COMPRESS.REMOVE_ORIGINAL=true
-job.articles.TRANSFER.ENABLED=true
-job.articles.TRANSFER.DIR=${ENV_EDP_OUT_PATH}
-job.articles.TRANSFER.MODE=move
-job.articles.TRANSFER.OVERWRITE=true
-job.articles.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}.gz
+```bash
+bash script/bin/exportctl plan \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
+  --date 2026-03-17 \
+  group:daily
 ```
 
-### 2.3 运行时日期变量
+适用场景：
 
-由 `export_data.sh` 注入：
-- `${EXPORT_DATE}`（默认今天或 `--date`）
-- `${TODAY}`（同 EXPORT_DATE）
-- `${YESTERDAY}`
-- `${EXPORT_MONTH}`（YYYY-MM）
-- `${MONTH_START}`（YYYY-MM-01）
-- `${MONTH_END}`（当月最后一天）
+- 按批次、业务域、日常/每月任务做分组执行
 
-## 3. 脚本与库的关系
+### 8.4 混合 selector
 
-### 3.1 总体流程
+```bash
+bash script/bin/exportctl plan \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
+  --date 2026-03-17 \
+  users group:broken missing_job
+```
 
-1. `bin/export_data.sh` 解析参数、加载 ENV、加载配置。
-2. `lib/db_config.sh` 读取 DB profile，生成密码文件路径。
-3. `lib/job_config.sh` 读取 job 配置、过滤条件、分片、压缩/传输设置。
-4. `lib/sql_builder.sh` 根据 JOB_* 构造 SQL。
-5. 若 `--execute`：
-   - `lib/sql_exec.sh` 执行 SQL 并导出文件。
-   - `lib/post_export.sh` 进行压缩与传输。
+你会看到：
 
-### 3.2 各库职责
+- `users` 正常输出
+- `group:broken` 里的坏 job 输出 `JOB_FAIL`
+- `missing_job` 输出 unknown selector 错误
 
-- `lib/properties.sh`
-  - 读取 `.properties` 到全局 `PROPS`。
-  - 支持 `${VAR}` 占位符展开。
-- `lib/db_config.sh`
-  - 读取 DB profile。
-  - 生成 `DB_PASSWORD_FILE`。
-- `lib/job_config.sh`
-  - 解析 job 配置、过滤、分片、压缩/传输参数。
-- `lib/sql_builder.sh`
-  - 生成 `SELECT ... WHERE ...` SQL。
-- `lib/sql_exec.sh`
-  - 执行 SQL（MySQL/Postgres）。
-  - 如果存在密码文件，会尝试解密。
-- `lib/crypto.sh`
-  - 加密/解密密码文件（openssl）。
-- `lib/post_export.sh`
-  - 压缩文件、移动/复制文件。
+### 8.5 真正执行导出
 
-## 4. 全局变量（关键）
+```bash
+bash script/bin/exportctl run \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
+  --date 2026-03-17 \
+  users daily_orders audit finance
+```
 
-### 4.1 运行时变量（export_data.sh）
-- `EXPORT_DATE`, `TODAY`, `YESTERDAY`
-- `EXPORT_MONTH`, `MONTH_START`, `MONTH_END`
+适用场景：
 
-### 4.2 DB 相关（db_config.sh）
-- `DB_PROFILE`
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_TYPE`
-- `DB_PASSWORD_DIR`（由 profile 配置提供）
-- `DB_PASSWORD_FILE`
-- `DB_PASSWORD_KEY_FILE`
+- 真正导出并生成文件
+- 需要结合本机 `mysql` 或 `psql` 客户端使用
 
-### 4.3 Job 相关（job_config.sh）
-- `JOB_NAME`
-- `JOB_DB_PROFILE`, `JOB_TABLE`, `JOB_COLUMNS`
-- `JOB_EXPORT_FILE`
-- `JOB_FIELD_SEPARATOR`, `JOB_LINE_TERMINATOR`
-- `JOB_FILTERS`（数组）
-- `JOB_SPLITS`（数组）
-- `JOB_COMPRESS_*` / `JOB_TRANSFER_*`
+### 8.6 生成密码文件
 
-### 4.4 配置缓存（properties.sh）
-- `PROPS`（全局关联数组）
+```bash
+bash script/bin/exportctl password encode \
+  --db-config script/etc/demo/db.properties \
+  --db-profile primary \
+  --password 'secret123' \
+  --key-file script/etc/demo/pwd/key_file
+```
 
+适用场景：
+
+- 首次准备数据库密码文件
+
+### 8.7 解密查看密码文件
+
+```bash
+bash script/bin/exportctl password decode \
+  --password-file script/etc/demo/pwd/localhost_3306_demo_user.pwd \
+  --key-file script/etc/demo/pwd/key_file
+```
+
+适用场景：
+
+- 验证密码文件是否可解密
+
+## 9. 推荐的手工检查方式
+
+如果你想自己完整检查一遍，建议按下面顺序：
+
+1. 先看 demo 配置
+
+```bash
+sed -n '1,200p' script/etc/demo/db.properties
+sed -n '1,240p' script/etc/demo/jobs.properties
+sed -n '1,120p' script/etc/demo/env.properties
+```
+
+2. 跑 demo 脚本
+
+```bash
+bash script/bin/demo_exportctl.sh
+```
+
+3. 再手动跑单个命令
+
+```bash
+bash script/bin/exportctl plan \
+  --db-config script/etc/demo/db.properties \
+  --jobs-config script/etc/demo/jobs.properties \
+  --env-config script/etc/demo/env.properties \
+  --date 2026-03-17 \
+  users
+```
+
+4. 如果要接真实数据库，再替换 `db.properties` 和密码文件
+
+## 10. 当前设计限制
+
+- `WHERE` 是 RAW SQL，程序不做语义校验
+- 只支持 `mysql` 和 `postgres`
+- 只有参数错误会返回 `1`
+- 运行期失败必须看日志和 `SUMMARY`
+
+如果你后面还要，我可以继续把这份手册补成：
+
+- 配置字段对照表版本
+- 调度系统接入指南版本
+- 问题排查 FAQ 版本

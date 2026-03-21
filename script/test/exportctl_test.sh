@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="$(cd "$ROOT_DIR/.." && pwd)"
+source "$ROOT_DIR/test/test_helpers.sh"
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+mkdir -p "$TMP_DIR/pwd" "$TMP_DIR/bin"
+printf 'key' >"$TMP_DIR/key"
+
+cat >"$TMP_DIR/bin/mysql" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '1\tAlice\n2\tBob\n'
+EOF
+chmod +x "$TMP_DIR/bin/mysql"
+
+cat >"$TMP_DIR/db.properties" <<EOF
+primary.DB_HOST=localhost
+primary.DB_PORT=3306
+primary.DB_NAME=demo
+primary.DB_USER=demo_user
+primary.DB_TYPE=mysql
+primary.DB_PASSWORD_DIR=$TMP_DIR/pwd
+primary.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
+EOF
+
+cat >"$TMP_DIR/jobs.properties" <<'EOF'
+job.users.DB_PROFILE=primary
+job.users.TABLE_NAME=users
+job.users.COLUMNS=id,name
+job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
+job.users.WHERE=status = 'active'
+job.bad.TABLE_NAME=bad
+job.bad.COLUMNS=id
+job.bad.EXPORT_FILE=./exports/bad.csv
+EOF
+
+plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 2>&1)"
+assert_contains "== Job: users ==" "$plan_output" "plan includes users"
+assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
+assert_contains "STATUS=FAILED" "$plan_output" "failed job status printed"
+assert_contains "JOB_FAIL name=bad" "$plan_output" "bad job logged"
+assert_contains "SUMMARY total=2 ok=1 failed=1" "$plan_output" "summary counts"
+
+run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 users 2>&1)"
+assert_contains "JOB_OK name=users" "$run_output" "run success log"
+assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv' ]]" "export file created"
+rm -rf "$PROJECT_DIR/exports"
+
+if "$ROOT_DIR/bin/exportctl" run --db-config >/dev/null 2>&1; then
+  echo "FAIL: expected invalid args to exit non-zero" >&2
+  exit 1
+fi
+
+echo "OK: exportctl_test.sh"

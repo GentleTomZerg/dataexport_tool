@@ -539,7 +539,7 @@ job.finance.TRANSFER.ENABLED=true
 job.finance.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
 job.finance.TRANSFER.MODE=copy
 job.finance.TRANSFER.OVERWRITE=true
-job.finance.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
+job.finance.TRANSFER.RENAME=00-${job.finance.TABLE_NAME}-${EXPORT_DATE}.${job.finance.COMPRESS.MODE}
 ```
 
 字段解释：
@@ -560,18 +560,17 @@ job.finance.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
 - `${JOB_NAME}`
 - `${EXPORT_DATE}`
 - `${BASENAME}`
-- `${EXT}`
 
 例如：
 
 ```properties
-job.finance.TRANSFER.RENAME=${JOB_NAME}_${EXPORT_DATE}${EXT}
+job.finance.TRANSFER.RENAME=00-${job.finance.TABLE_NAME}-${EXPORT_DATE}.${job.finance.COMPRESS.MODE}
 ```
 
-如果原文件是 `finance_2026-03-17.csv`，则目标名可能变成：
+如果 `TABLE_NAME=finance_report` 且 `COMPRESS.MODE=gz`，则目标名可能变成：
 
 ```text
-finance_2026-03-17.csv
+00-finance_report-2026-03-17.gz
 ```
 
 ## 6. 输出内容怎么理解

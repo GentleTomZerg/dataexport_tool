@@ -12,6 +12,12 @@ log_error() {
   printf 'ERROR: %s\n' "$*" >&2
 }
 
+log_job_info() {
+  local job_name="$1"
+  shift
+  printf 'JOB_INFO name=%s %s\n' "$job_name" "$*" >&2
+}
+
 log_job_error() {
   local job_name="$1"
   shift

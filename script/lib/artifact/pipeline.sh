@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/common/log.sh"
+
 _render_artifact_name() {
   local pattern="$1"
   local src="$2"
   local job_name="$3"
   local export_date="$4"
-  local base ext out
+  local base out
   base="${src##*/}"
-  ext=""
-  [[ "$base" == *.* ]] && ext=".${base##*.}"
   out="$pattern"
   out="${out//\$\{JOB_NAME\}/$job_name}"
   out="${out//\$\{EXPORT_DATE\}/$export_date}"
   out="${out//\$\{BASENAME\}/$base}"
-  out="${out//\$\{EXT\}/$ext}"
   printf '%s' "$out"
 }
 
@@ -82,13 +81,20 @@ run_artifact_pipeline() {
   local plan_name="$1"
   local -n _plan="$plan_name"
   local artifact="${_plan[export_file]}"
+  local before=""
 
   if [[ "${_plan[compress_enabled]}" == "true" ]]; then
+    before="$artifact"
+    log_job_info "${_plan[job_name]}" "stage=compress_start file=$before mode=${_plan[compress_mode]}"
     artifact="$(_compress_artifact "$artifact" "${_plan[compress_mode]}" "${_plan[compress_overwrite]}" "${_plan[compress_remove_original]}")" || return 1
+    log_job_info "${_plan[job_name]}" "stage=compress_ok src=$before dest=$artifact mode=${_plan[compress_mode]} remove_original=${_plan[compress_remove_original]}"
   fi
 
   if [[ "${_plan[transfer_enabled]}" == "true" ]]; then
+    before="$artifact"
+    log_job_info "${_plan[job_name]}" "stage=transfer_start file=$before dir=${_plan[transfer_dir]} mode=${_plan[transfer_mode]}"
     artifact="$(_transfer_artifact "$artifact" "${_plan[transfer_dir]}" "${_plan[transfer_mode]}" "${_plan[transfer_overwrite]}" "${_plan[transfer_rename]}" "${_plan[job_name]}" "${EXPORT_DATE:-}")" || return 1
+    log_job_info "${_plan[job_name]}" "stage=transfer_ok src=$before dest=$artifact mode=${_plan[transfer_mode]}"
   fi
 
   _plan[artifact_path]="$artifact"

@@ -62,6 +62,16 @@ print_validate_ok() {
   printf 'STATUS=OK\n\n'
 }
 
+file_line_count() {
+  local path="$1"
+  awk 'END { print NR + 0 }' "$path"
+}
+
+file_byte_size() {
+  local path="$1"
+  wc -c <"$path" | tr -d '[:space:]'
+}
+
 load_all_properties() {
   local props_name="$1"
   local -n _props="$props_name"
@@ -105,16 +115,22 @@ process_job() {
 
   print_plan plan
 
+  log_job_info "$job_name" "stage=export_start db_type=${plan[db_type]} file=${plan[export_file]}"
   if ! execute_plan_export plan profile; then
     log_job_error "$job_name" "stage=export reason=db export failed"
     summary_mark_failed "$summary_name" "$job_name"
     return 0
   fi
+  log_job_info "$job_name" "stage=export_ok file=${plan[export_file]} lines=$(file_line_count "${plan[export_file]}") bytes=$(file_byte_size "${plan[export_file]}")"
 
   if ! run_artifact_pipeline plan; then
     log_job_error "$job_name" "stage=artifact reason=post export pipeline failed"
     summary_mark_failed "$summary_name" "$job_name"
     return 0
+  fi
+
+  if [[ -n "${plan[artifact_path]:-}" && -f "${plan[artifact_path]}" ]]; then
+    log_job_info "$job_name" "stage=artifact_ok file=${plan[artifact_path]} bytes=$(file_byte_size "${plan[artifact_path]}")"
   fi
 
   summary_mark_ok "$summary_name" "$job_name"

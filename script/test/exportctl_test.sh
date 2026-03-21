@@ -34,6 +34,14 @@ job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=./exports/users_${EXPORT_DATE}.csv
 job.users.WHERE=status = 'active'
+job.users.COMPRESS.ENABLED=true
+job.users.COMPRESS.MODE=gz
+job.users.COMPRESS.OVERWRITE=true
+job.users.TRANSFER.ENABLED=true
+job.users.TRANSFER.DIR=./exports_transfer
+job.users.TRANSFER.MODE=copy
+job.users.TRANSFER.OVERWRITE=true
+job.users.TRANSFER.RENAME=users_${EXPORT_DATE}.gz
 job.bad.TABLE_NAME=bad
 job.bad.COLUMNS=id
 job.bad.EXPORT_FILE=./exports/bad.csv
@@ -57,9 +65,18 @@ unknown_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-
 assert_contains "ERROR: unknown selector missing_job" "$unknown_output" "unknown selector logged"
 
 run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --date 2026-03-17 users 2>&1)"
+assert_contains "JOB_INFO name=users stage=export_start" "$run_output" "export start log"
+assert_contains "JOB_INFO name=users stage=export_ok file=./exports/users_2026-03-17.csv lines=2" "$run_output" "export metrics log"
+assert_contains "JOB_INFO name=users stage=compress_start file=./exports/users_2026-03-17.csv mode=gz" "$run_output" "compress start log"
+assert_contains "JOB_INFO name=users stage=compress_ok src=./exports/users_2026-03-17.csv dest=./exports/users_2026-03-17.csv.gz mode=gz remove_original=false" "$run_output" "compress ok log"
+assert_contains "JOB_INFO name=users stage=transfer_start file=./exports/users_2026-03-17.csv.gz dir=./exports_transfer mode=copy" "$run_output" "transfer start log"
+assert_contains "JOB_INFO name=users stage=transfer_ok src=./exports/users_2026-03-17.csv.gz dest=./exports_transfer/users_2026-03-17.gz mode=copy" "$run_output" "transfer ok log"
+assert_contains "JOB_INFO name=users stage=artifact_ok file=./exports_transfer/users_2026-03-17.gz" "$run_output" "final artifact log"
 assert_contains "JOB_OK name=users" "$run_output" "run success log"
 assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv' ]]" "export file created"
-rm -rf "$PROJECT_DIR/exports"
+assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv.gz' ]]" "compressed file created"
+assert_true "[[ -f '$PROJECT_DIR/exports_transfer/users_2026-03-17.gz' ]]" "transferred file created"
+rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 if "$ROOT_DIR/bin/exportctl" run --db-config >/dev/null 2>&1; then
   echo "FAIL: expected invalid args to exit non-zero" >&2

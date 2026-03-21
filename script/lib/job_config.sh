@@ -34,14 +34,13 @@ list_jobs() {
   done | sort
 }
 
-## Load a single export job configuration from PROPS.
-## Required keys: job.<name>.TABLE_NAME, job.<name>.COLUMNS
-## Optional keys: job.<name>.DB_PROFILE, job.<name>.EXPORT_FILE,
-##                job.<name>.FIELD_SEPARATOR, job.<name>.LINE_TERMINATOR,
-##                job.<name>.WHERE, job.<name>.SPLIT.<col>,
-##                job.<name>.TRANSFER.*, job.<name>.COMPRESS.*
-## Populates the JOB associative array.
-## Usage: load_job_config "job1"
+## Load and validate a single export job configuration from PROPS.
+## Populates the JOB associative array. Returns 1 on validation failure.
+##
+## Required: job.<name>.TABLE_NAME, job.<name>.COLUMNS, job.<name>.DB_PROFILE
+## Optional: job.<name>.EXPORT_FILE, job.<name>.WHERE,
+##           job.<name>.FIELD_SEPARATOR (default: \t),
+##           job.<name>.LINE_TERMINATOR (default: \n)
 load_job_config() {
   local job="$1"
   local prefix="job.${job}."
@@ -66,27 +65,13 @@ load_job_config() {
     echo "Missing TABLE_NAME or COLUMNS for job: $job" >&2
     return 1
   fi
+  if [[ -z "${JOB[db_profile]}" ]]; then
+    echo "Missing DB_PROFILE for job: $job (set job.${job}.DB_PROFILE)" >&2
+    return 1
+  fi
 
-  export JOB
-}
-
-## Validate job columns and separators after load_job_config.
-## - Columns must be non-empty after trimming.
-## - Separators must be non-empty.
-validate_job_config() {
-  local job="$1"
   local raw_columns=()
   local col trimmed
-
-  if [[ -z "${JOB[field_separator]}" ]]; then
-    echo "Empty FIELD_SEPARATOR for job: $job" >&2
-    return 1
-  fi
-  if [[ -z "${JOB[line_terminator]}" ]]; then
-    echo "Empty LINE_TERMINATOR for job: $job" >&2
-    return 1
-  fi
-
   IFS=',' read -r -a raw_columns <<<"${JOB[columns]}"
   for col in "${raw_columns[@]}"; do
     trimmed="$(trim "$col")"
@@ -95,14 +80,28 @@ validate_job_config() {
       return 1
     fi
   done
+
+  export JOB
 }
 
-## Load transfer settings into JOB_TRANSFER associative array.
-## Defaults:
-## - enabled=false
-## - mode=move
-## - overwrite=false
-## - rename=""
+## Validate that the referenced DB profile has all required keys defined.
+## This is a lightweight check — it does not verify password files or key files.
+## (Those are checked later by load_db_profile when the job actually runs.)
+validate_db_profile_exists() {
+  local job="$1"
+  local profile="${JOB[db_profile]}"
+  local key
+
+  for key in DB_HOST DB_PORT DB_NAME DB_USER DB_TYPE DB_PASSWORD_DIR DB_PASSWORD_KEY_FILE; do
+    if [[ -z "$(get_prop "${profile}.${key}")" ]]; then
+      echo "DB profile '${profile}' (used by job: $job) missing required key: ${profile}.${key}" >&2
+      return 1
+    fi
+  done
+}
+
+## Load and validate transfer settings into JOB_TRANSFER associative array.
+## Defaults: enabled=false, mode=move, overwrite=false, rename=""
 load_job_transfer() {
   local job="$1"
   local prefix="job.${job}.TRANSFER."
@@ -126,26 +125,21 @@ load_job_transfer() {
   if [[ -z "${JOB_TRANSFER[overwrite]}" ]]; then
     JOB_TRANSFER[overwrite]="false"
   fi
-}
 
-validate_job_transfer() {
-  local job="$1"
   if [[ "${JOB_TRANSFER[enabled]}" == "true" ]]; then
     if [[ -z "${JOB_TRANSFER[dir]}" ]]; then
       echo "Missing TRANSFER.DIR for job: $job" >&2
       return 1
     fi
     case "${JOB_TRANSFER[mode]}" in
-      move|copy)
-        ;;
+      move|copy) ;;
       *)
         echo "Invalid TRANSFER.MODE for job: $job (${JOB_TRANSFER[mode]})" >&2
         return 1
         ;;
     esac
     case "${JOB_TRANSFER[overwrite]}" in
-      true|false)
-        ;;
+      true|false) ;;
       *)
         echo "Invalid TRANSFER.OVERWRITE for job: $job (${JOB_TRANSFER[overwrite]})" >&2
         return 1
@@ -154,12 +148,8 @@ validate_job_transfer() {
   fi
 }
 
-## Load compression settings into JOB_COMPRESS associative array.
-## Defaults:
-## - enabled=false
-## - mode=tar.gz
-## - overwrite=false
-## - remove_original=false
+## Load and validate compression settings into JOB_COMPRESS associative array.
+## Defaults: enabled=false, mode=tar.gz, overwrite=false, remove_original=false
 load_job_compress() {
   local job="$1"
   local prefix="job.${job}.COMPRESS."
@@ -186,30 +176,24 @@ load_job_compress() {
   if [[ -z "${JOB_COMPRESS[remove_original]}" ]]; then
     JOB_COMPRESS[remove_original]="false"
   fi
-}
 
-validate_job_compress() {
-  local job="$1"
   if [[ "${JOB_COMPRESS[enabled]}" == "true" ]]; then
     case "${JOB_COMPRESS[mode]}" in
-      gz|tar|tar.gz|tgz)
-        ;;
+      gz|tar|tar.gz|tgz) ;;
       *)
         echo "Invalid COMPRESS.MODE for job: $job (${JOB_COMPRESS[mode]})" >&2
         return 1
         ;;
     esac
     case "${JOB_COMPRESS[overwrite]}" in
-      true|false)
-        ;;
+      true|false) ;;
       *)
         echo "Invalid COMPRESS.OVERWRITE for job: $job (${JOB_COMPRESS[overwrite]})" >&2
         return 1
         ;;
     esac
     case "${JOB_COMPRESS[remove_original]}" in
-      true|false)
-        ;;
+      true|false) ;;
       *)
         echo "Invalid COMPRESS.REMOVE_ORIGINAL for job: $job (${JOB_COMPRESS[remove_original]})" >&2
         return 1
@@ -218,38 +202,16 @@ validate_job_compress() {
   fi
 }
 
-## Collect split column definitions for a job into JOB_SPLITS_RAW array.
+## Load and validate split column definitions, producing JOB_SPLITS.
 ##
-## Split properties (export_jobs.properties), Option B:
-##   job.<name>.SPLIT.<col>=<chunk_size>,<chunks>
-##
-## Output structure (JOB_SPLITS_RAW):
-## - "col|chunk_size|chunks|extra"
-##
-## Notes:
-## - Only columns listed in JOB[columns] are actually split.
-## - Validation is handled by validate_job_splits().
+## Config: job.<name>.SPLIT.<col>=<chunk_size>,<chunks>
+## Output: JOB_SPLITS array of "col|chunk_size|chunks"
 load_job_splits() {
   local job="$1"
   local prefix="job.${job}.SPLIT."
-  JOB_SPLITS_RAW=()
-  local key col value chunk_size chunks extra
 
-  while IFS= read -r key; do
-    col="${key#${prefix}}"
-    [[ -z "$col" ]] && continue
-    value="$(get_prop "$key")"
-    IFS=',' read -r chunk_size chunks extra <<<"$value"
-    chunk_size="$(trim "${chunk_size:-}")"
-    chunks="$(trim "${chunks:-}")"
-    JOB_SPLITS_RAW+=("${col}|${chunk_size}|${chunks}|${extra}")
-  done < <(list_props_by_prefix "$prefix")
+  JOB_SPLITS=()
 
-}
-
-## Validate split rules and produce JOB_SPLITS for SQL building.
-validate_job_splits() {
-  local job="$1"
   local raw_columns=()
   local col_name
   declare -A columns_set
@@ -261,11 +223,14 @@ validate_job_splits() {
     columns_set["$col_name"]=1
   done
 
-  JOB_SPLITS=()
-  local item col chunk_size chunks extra
-  for item in "${JOB_SPLITS_RAW[@]:-}"; do
-    [[ -z "$item" ]] && continue
-    IFS='|' read -r col chunk_size chunks extra <<<"$item"
+  local key col value chunk_size chunks extra
+  while IFS= read -r key; do
+    col="${key#${prefix}}"
+    [[ -z "$col" ]] && continue
+    value="$(get_prop "$key")"
+    IFS=',' read -r chunk_size chunks extra <<<"$value"
+    chunk_size="$(trim "${chunk_size:-}")"
+    chunks="$(trim "${chunks:-}")"
 
     if [[ -z "$chunk_size" || -z "$chunks" ]]; then
       echo "Invalid SPLIT for job: $job (empty value for $col)" >&2
@@ -289,6 +254,5 @@ validate_job_splits() {
     fi
 
     JOB_SPLITS+=("${col}|${chunk_size}|${chunks}")
-  done
-
+  done < <(list_props_by_prefix "$prefix")
 }

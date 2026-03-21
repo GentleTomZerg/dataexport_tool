@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/crypto.sh"
 
+declare -Ag DB
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -70,8 +72,8 @@ printf 'dummy' >"$PWD_FILE"
 printf 'key' >"$KEY_FILE"
 
 # decrypt_password: success path with correct openssl args.
-DB_PASSWORD_KEY_FILE="$KEY_FILE"
-export DB_PASSWORD_KEY_FILE
+DB[password_key_file]="$KEY_FILE"
+export DB
 OPENSSL_OUTPUT="plain"
 export OPENSSL_OUTPUT
 
@@ -80,13 +82,13 @@ assert_eq "plain" "$result" "decrypt output"
 assert_true "grep -q -- 'des3 -d -salt -in $PWD_FILE -pass file:$KEY_FILE -pbkdf2 -iter 100000' '$OPENSSL_LOG'" "decrypt args"
 
 # decrypt_password: missing key file should fail.
-DB_PASSWORD_KEY_FILE="$TMP_DIR/missing.key"
-export DB_PASSWORD_KEY_FILE
+DB[password_key_file]="$TMP_DIR/missing.key"
+export DB
 assert_fail "decrypt should fail when key file missing" decrypt_password "$PWD_FILE"
 
 # encode_password: writes output file and uses expected args.
-DB_PASSWORD_KEY_FILE="$KEY_FILE"
-export DB_PASSWORD_KEY_FILE
+DB[password_key_file]="$KEY_FILE"
+export DB
 OPENSSL_OUTPUT=""
 export OPENSSL_OUTPUT
 

@@ -49,17 +49,17 @@ _sql_exec_with_mysql() {
   if [[ -n "$db_password" ]]; then
     MYSQL_PWD="$db_password" \
       mysql --batch --raw --skip-column-names \
-      -h "$DB_HOST" \
-      -P "$DB_PORT" \
-      -u "$DB_USER" \
-      "$DB_NAME" \
+      -h "${DB[host]}" \
+      -P "${DB[port]}" \
+      -u "${DB[user]}" \
+      "${DB[name]}" \
       -e "$sql" | _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   else
     mysql --batch --raw --skip-column-names \
-      -h "$DB_HOST" \
-      -P "$DB_PORT" \
-      -u "$DB_USER" \
-      "$DB_NAME" \
+      -h "${DB[host]}" \
+      -P "${DB[port]}" \
+      -u "${DB[user]}" \
+      "${DB[name]}" \
       -e "$sql" | _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   fi
 }
@@ -73,18 +73,18 @@ _sql_exec_with_postgres() {
 
   if [[ -n "$db_password" ]]; then
     PGPASSWORD="$db_password" psql \
-      -h "$DB_HOST" \
-      -p "$DB_PORT" \
-      -U "$DB_USER" \
-      -d "$DB_NAME" \
+      -h "${DB[host]}" \
+      -p "${DB[port]}" \
+      -U "${DB[user]}" \
+      -d "${DB[name]}" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
       _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   else
     psql \
-      -h "$DB_HOST" \
-      -p "$DB_PORT" \
-      -U "$DB_USER" \
-      -d "$DB_NAME" \
+      -h "${DB[host]}" \
+      -p "${DB[port]}" \
+      -U "${DB[user]}" \
+      -d "${DB[name]}" \
       -c "\\copy (${sql}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
       _sql_exec_apply_separators "$field_sep_raw" "$line_term_raw" >"$out_file"
   fi
@@ -93,7 +93,7 @@ _sql_exec_with_postgres() {
 sql_exec_export() {
   local sql="$1"
   local out_file="$2"
-  local db_type="${DB_TYPE:-mysql}"
+  local db_type="${DB[type]:-mysql}"
   local field_sep_raw="${3:-${JOB[field_separator]:-\\t}}"
   local line_term_raw="${4:-${JOB[line_terminator]:-\\n}}"
   local pwd_file db_password=""
@@ -103,7 +103,7 @@ sql_exec_export() {
     return 1
   fi
 
-  pwd_file="${DB_PASSWORD_FILE:-}"
+  pwd_file="${DB[password_file]:-}"
   if [[ -z "$pwd_file" ]] && declare -F db_password_file >/dev/null 2>&1; then
     pwd_file="$(db_password_file)"
   fi

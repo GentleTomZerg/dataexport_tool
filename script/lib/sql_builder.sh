@@ -18,7 +18,7 @@ sql_escape_literal() {
 
 _sql_build_select_columns() {
   local columns_raw="$1"
-  local db_type="${DB_TYPE:-mysql}"
+  local db_type="${DB[type]:-mysql}"
   local raw_columns=()
   local columns=()
   local item col

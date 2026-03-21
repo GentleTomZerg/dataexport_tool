@@ -50,17 +50,18 @@ decrypt_password() {
 }
 
 # Common DB settings.
-DB_HOST="localhost"
-DB_PORT="3306"
-DB_USER="user"
-DB_NAME="db"
-export DB_HOST DB_PORT DB_USER DB_NAME
+declare -Ag DB
+DB[host]="localhost"
+DB[port]="3306"
+DB[user]="user"
+DB[name]="db"
+export DB
 
 # 1) MySQL with password file: uses MYSQL_PWD and applies separators.
-DB_TYPE="mysql"
-DB_PASSWORD_FILE="$TMP_DIR/localhost_3306_user.pwd"
-export DB_TYPE DB_PASSWORD_FILE
-printf 'dummy' >"$DB_PASSWORD_FILE"
+DB[type]="mysql"
+DB[password_file]="$TMP_DIR/localhost_3306_user.pwd"
+export DB
+printf 'dummy' >"${DB[password_file]}"
 
 out_file="$TMP_DIR/mysql.out"
 JOB[field_separator]="|"
@@ -73,11 +74,11 @@ assert_true "cmp -s '$TMP_DIR/expected_mysql.out' '$out_file'" "mysql output for
 assert_eq "secret" "$(cat "$MYSQL_LOG.pwd")" "mysql password from file"
 
 # 2) Postgres with password file: uses PGPASSWORD and applies separators.
-DB_TYPE="postgres"
-DB_PORT="5432"
-DB_PASSWORD_FILE="$TMP_DIR/localhost_5432_user.pwd"
-export DB_TYPE DB_PORT DB_PASSWORD_FILE
-printf 'dummy' >"$DB_PASSWORD_FILE"
+DB[type]="postgres"
+DB[port]="5432"
+DB[password_file]="$TMP_DIR/localhost_5432_user.pwd"
+export DB
+printf 'dummy' >"${DB[password_file]}"
 
 out_file="$TMP_DIR/psql.out"
 JOB[field_separator]=","
@@ -90,9 +91,9 @@ assert_true "cmp -s '$TMP_DIR/expected_psql.out' '$out_file'" "postgres output f
 assert_eq "secret" "$(cat "$PSQL_LOG.pwd")" "postgres password from file"
 
 # 3) MySQL without password file: no MYSQL_PWD used.
-DB_TYPE="mysql"
-DB_PASSWORD_FILE="$TMP_DIR/missing.pwd"
-export DB_TYPE DB_PASSWORD_FILE
+DB[type]="mysql"
+DB[password_file]="$TMP_DIR/missing.pwd"
+export DB
 rm -f "$MYSQL_LOG.pwd"
 
 out_file="$TMP_DIR/mysql.nopwd.out"

@@ -8,6 +8,7 @@ source "$ROOT_DIR/lib/sql_builder.sh"
 
 # Base data used by all tests.
 declare -Ag JOB
+declare -Ag DB
 JOB[table]="users"
 JOB[columns]="id,name,email"
 
@@ -40,7 +41,7 @@ JOB[where]="status IN ('active', 'pending') OR region = 'US'"
 assert_eq "SELECT id,name,email FROM users WHERE status IN ('active', 'pending') OR region = 'US'" "$(build_select_sql)" "or and in where"
 
 # 8) Split columns with WHERE: splits affect SELECT, WHERE is passed through.
-DB_TYPE="mysql"
+DB[type]="mysql"
 JOB[columns]="id,content,email"
 JOB[where]="created_at > '2024-01-01'"
 JOB_SPLITS=("content|4|3")

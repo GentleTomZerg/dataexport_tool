@@ -39,10 +39,10 @@ main() {
   ROOT_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
   # Default locations (edit here if you keep configs elsewhere).
-  CONFIG_FILE="$ROOT_DIR/etc/local/config/export_jobs.properties"
+  CONFIG_FILE="$ROOT_DIR/etc/local/config/export_jobs_where.properties"
   ENV_CONFIG="$ROOT_DIR/etc/local/env.properties"
 
-  FAKE_MYSQL=1
+  FAKE_MYSQL=0
 
   if [ "${FAKE_MYSQL:-0}" = "1" ]; then
     FAKE_BIN=$(mktemp -d)
@@ -61,8 +61,7 @@ FAKE
     --db-config "$CONFIG_FILE" \
     --jobs-config "$CONFIG_FILE" \
     --env-config "$ENV_CONFIG" \
-    --date "$batch_date" \
-    --execute
+    --date "$batch_date"
 }
 
 main "$@"

@@ -35,7 +35,6 @@ parse_args() {
   DB_CONFIG=""
   JOBS_CONFIG=""
   ENV_CONFIG=""
-  ACTIVE_DB_PROFILE=""
   JOBS_ARG=""
   RUN_DATE=""
   SHOW_HELP=0
@@ -135,25 +134,11 @@ print_runtime_dates() {
   echo
 }
 
-load_db_properties() {
-  # Uses lib/db_config.sh which sources properties internally.
-  load_properties "$DB_CONFIG"
-}
-
-load_job_config_file() {
-  # Uses lib/job_config.sh which sources properties internally.
-  load_properties "$JOBS_CONFIG"
-}
-
-load_env_properties() {
+export_env_vars() {
   local key
-
   if [[ -z "$ENV_CONFIG" ]]; then
     return 0
   fi
-
-  # Load ENV_* values into PROPS, then export them for config expansion.
-  load_properties "$ENV_CONFIG"
   while IFS= read -r key; do
     [[ "$key" == ENV_* ]] || continue
     export "$key=$(get_prop "$key")"
@@ -162,7 +147,6 @@ load_env_properties() {
 
 print_env_properties() {
   local key
-
   if [[ -z "$ENV_CONFIG" ]]; then
     return 0
   fi
@@ -173,18 +157,6 @@ print_env_properties() {
     echo "${key}=${!key}"
   done < <(list_props_by_prefix "ENV_")
   echo
-}
-
-validate_job_bundle() {
-  local job="$1"
-  load_job_config "$job"
-  validate_job_config "$job"
-  load_job_splits "$job"
-  validate_job_splits "$job"
-  load_job_transfer "$job"
-  validate_job_transfer "$job"
-  load_job_compress "$job"
-  validate_job_compress "$job"
 }
 
 resolve_jobs() {
@@ -200,6 +172,100 @@ resolve_jobs() {
   fi
 }
 
+## Load and validate everything for a single job.
+load_and_validate_job() {
+  local job="$1"
+  load_job_config "$job"
+  validate_db_profile_exists "$job"
+  load_job_splits "$job"
+  load_job_transfer "$job"
+  load_job_compress "$job"
+}
+
+## Print job info and SQL to stdout.
+print_job_info() {
+  local job="$1"
+  local sql="$2"
+
+  echo "== Job: $job =="
+  echo "DB_PROFILE=${DB[profile]}"
+  echo "DB_TYPE=${DB[type]}"
+  echo "DB_HOST=${DB[host]}"
+  echo "DB_PORT=${DB[port]}"
+  echo "TABLE=${JOB[table]}"
+  echo "COLUMNS=${JOB[columns]}"
+  echo "EXPORT_FILE=${JOB[export_file]:-}"
+  echo "FIELD_SEPARATOR=${JOB[field_separator]}"
+  echo "LINE_TERMINATOR=${JOB[line_terminator]}"
+  echo "SQL=$sql"
+  echo
+}
+
+## Execute export, compress, and transfer for a single job.
+execute_export_for_job() {
+  local job="$1"
+  local sql="$2"
+
+  if [[ -z "${JOB[export_file]:-}" ]]; then
+    echo "Missing EXPORT_FILE for job: $job" >&2
+    return 1
+  fi
+  if ! mkdir -p "$(dirname "${JOB[export_file]}")"; then
+    echo "Failed to create export dir for job: $job" >&2
+    return 1
+  fi
+  if ! sql_exec_export "$sql" "${JOB[export_file]}" "${JOB[field_separator]}" "${JOB[line_terminator]}"; then
+    echo "sql_exec_export failed for job: $job" >&2
+    return 1
+  fi
+  local line_count
+  line_count="$(wc -l <"${JOB[export_file]}" | tr -d ' ')"
+  echo "EXPORT_OK: ${JOB[export_file]} (lines=$line_count)"
+
+  local artifact_path="${JOB[export_file]}"
+  if [[ "${JOB_COMPRESS[enabled]}" == "true" ]]; then
+    local before="$artifact_path"
+    if ! artifact_path="$(compress_file "$artifact_path" "${JOB_COMPRESS[mode]}" "${JOB_COMPRESS[overwrite]}" "${JOB_COMPRESS[remove_original]}")"; then
+      echo "Compress failed for job: $job" >&2
+      return 1
+    fi
+    echo "COMPRESS_OK: $before -> $artifact_path (mode=${JOB_COMPRESS[mode]} remove_original=${JOB_COMPRESS[remove_original]})"
+  fi
+  if [[ "${JOB_TRANSFER[enabled]}" == "true" ]]; then
+    local before="$artifact_path"
+    if ! artifact_path="$(transfer_file "$artifact_path" "${JOB_TRANSFER[dir]}" "${JOB_TRANSFER[mode]}" "${JOB_TRANSFER[overwrite]}" "${JOB_TRANSFER[rename]}")"; then
+      echo "Transfer failed for job: $job" >&2
+      return 1
+    fi
+    echo "TRANSFER_OK: $before -> $artifact_path (mode=${JOB_TRANSFER[mode]} overwrite=${JOB_TRANSFER[overwrite]} rename=${JOB_TRANSFER[rename]:-})"
+  fi
+}
+
+## Process a single job: validate, load DB, build SQL, optionally execute.
+run_one_job() {
+  local job="$1"
+  local active_db_profile=""
+
+  load_and_validate_job "$job"
+
+  if [[ "${JOB[db_profile]}" != "$active_db_profile" || -z "${DB[host]:-}" ]]; then
+    active_db_profile="${JOB[db_profile]}"
+    if ! load_db_profile "$active_db_profile"; then
+      echo "JOB_FAILED: $job (invalid DB profile: $active_db_profile)" >&2
+      return 1
+    fi
+  fi
+
+  local sql
+  sql="$(build_select_sql)"
+
+  print_job_info "$job" "$sql"
+
+  if [[ "$EXECUTE" -eq 1 ]]; then
+    execute_export_for_job "$job" "$sql"
+  fi
+}
+
 run_jobs() {
   local job
   local failed_jobs=()
@@ -208,85 +274,8 @@ run_jobs() {
     job="${job%%+([[:space:]])}"
     [[ -z "$job" ]] && continue
 
-    # Load and validate per-job config, filters, and split rules.
-    if ! validate_job_bundle "$job"; then
-      echo "JOB_FAILED: $job (validation failed)" >&2
+    if ! run_one_job "$job"; then
       failed_jobs+=("$job")
-      continue
-    fi
-
-    if [[ -z "${JOB[db_profile]}" ]]; then
-      echo "Missing DB profile for job: $job (set job.${job}.DB_PROFILE)" >&2
-      echo "JOB_FAILED: $job (missing DB_PROFILE)" >&2
-      failed_jobs+=("$job")
-      continue
-    fi
-
-    if [[ "${JOB[db_profile]}" != "$ACTIVE_DB_PROFILE" || -z "${DB_HOST:-}" ]]; then
-      ACTIVE_DB_PROFILE="${JOB[db_profile]}"
-      if ! load_db_profile "$ACTIVE_DB_PROFILE"; then
-        echo "JOB_FAILED: $job (invalid DB profile: $ACTIVE_DB_PROFILE)" >&2
-        failed_jobs+=("$job")
-        continue
-      fi
-    fi
-
-    local SQL
-    SQL="$(build_select_sql)"
-
-    echo "== Job: $job =="
-    echo "DB_PROFILE=$ACTIVE_DB_PROFILE"
-    echo "DB_TYPE=$DB_TYPE"
-    echo "DB_HOST=$DB_HOST"
-    echo "DB_PORT=$DB_PORT"
-    echo "TABLE=${JOB[table]}"
-    echo "COLUMNS=${JOB[columns]}"
-    echo "EXPORT_FILE=${JOB[export_file]:-}"
-    echo "FIELD_SEPARATOR=${JOB[field_separator]}"
-    echo "LINE_TERMINATOR=${JOB[line_terminator]}"
-    echo "SQL=$SQL"
-    echo
-
-    if [[ "$EXECUTE" -eq 1 ]]; then
-      if [[ -z "${JOB[export_file]:-}" ]]; then
-        echo "Missing EXPORT_FILE for job: $job" >&2
-        echo "JOB_FAILED: $job (missing EXPORT_FILE)" >&2
-        failed_jobs+=("$job")
-        continue
-      fi
-      if ! mkdir -p "$(dirname "${JOB[export_file]}")"; then
-        echo "JOB_FAILED: $job (failed to create export dir)" >&2
-        failed_jobs+=("$job")
-        continue
-      fi
-      if ! sql_exec_export "$SQL" "${JOB[export_file]}" "${JOB[field_separator]}" "${JOB[line_terminator]}"; then
-        echo "JOB_FAILED: $job (sql_exec_export failed)" >&2
-        failed_jobs+=("$job")
-        continue
-      fi
-      local line_count
-      line_count="$(wc -l <"${JOB[export_file]}" | tr -d ' ')"
-      echo "EXPORT_OK: ${JOB[export_file]} (lines=$line_count)"
-
-      local artifact_path="${JOB[export_file]}"
-      if [[ "${JOB_COMPRESS[enabled]}" == "true" ]]; then
-        local before_compress="$artifact_path"
-        if ! artifact_path="$(compress_file "$artifact_path" "${JOB_COMPRESS[mode]}" "${JOB_COMPRESS[overwrite]}" "${JOB_COMPRESS[remove_original]}")"; then
-          echo "JOB_FAILED: $job (compress failed)" >&2
-          failed_jobs+=("$job")
-          continue
-        fi
-        echo "COMPRESS_OK: $before_compress -> $artifact_path (mode=${JOB_COMPRESS[mode]} remove_original=${JOB_COMPRESS[remove_original]})"
-      fi
-      if [[ "${JOB_TRANSFER[enabled]}" == "true" ]]; then
-        local before_transfer="$artifact_path"
-        if ! artifact_path="$(transfer_file "$artifact_path" "${JOB_TRANSFER[dir]}" "${JOB_TRANSFER[mode]}" "${JOB_TRANSFER[overwrite]}" "${JOB_TRANSFER[rename]}")"; then
-          echo "JOB_FAILED: $job (transfer failed)" >&2
-          failed_jobs+=("$job")
-          continue
-        fi
-        echo "TRANSFER_OK: $before_transfer -> $artifact_path (mode=${JOB_TRANSFER[mode]} overwrite=${JOB_TRANSFER[overwrite]} rename=${JOB_TRANSFER[rename]:-})"
-      fi
     fi
   done
 
@@ -304,10 +293,11 @@ main() {
   require_args
   init_runtime_dates "$RUN_DATE"
   print_runtime_dates
-  load_env_properties
+  [[ -n "$ENV_CONFIG" ]] && load_properties "$ENV_CONFIG"
+  export_env_vars
   print_env_properties
-  load_db_properties
-  load_job_config_file
+  load_properties "$DB_CONFIG"
+  load_properties "$JOBS_CONFIG"
   resolve_jobs
   run_jobs
 }

@@ -11,20 +11,20 @@ set -euo pipefail
 decrypt_password() {
   local pwd_file="$1"
 
-  if [[ -z "${DB_PASSWORD_KEY_FILE:-}" ]]; then
-    echo "DB_PASSWORD_KEY_FILE is not set. It is required to decrypt passwords." >&2
+  if [[ -z "${DB[password_key_file]:-}" ]]; then
+    echo "DB[password_key_file] is not set. It is required to decrypt passwords." >&2
     return 1
   fi
   if [[ ! -f "$pwd_file" ]]; then
     echo "Password file not found: $pwd_file" >&2
     return 1
   fi
-  if [[ ! -f "$DB_PASSWORD_KEY_FILE" ]]; then
-    echo "Key file not found: $DB_PASSWORD_KEY_FILE" >&2
+  if [[ ! -f "${DB[password_key_file]}" ]]; then
+    echo "Key file not found: ${DB[password_key_file]}" >&2
     return 1
   fi
 
-  openssl des3 -d -salt -in "$pwd_file" -pass "file:$DB_PASSWORD_KEY_FILE" -pbkdf2 -iter 100000
+  openssl des3 -d -salt -in "$pwd_file" -pass "file:${DB[password_key_file]}" -pbkdf2 -iter 100000
 }
 
 ## Encrypt a plaintext password into a .pwd file using openssl and DB_PASSWORD_KEY_FILE.
@@ -34,17 +34,17 @@ encode_password() {
   local plain="$1"
   local pwd_file="$2"
 
-  if [[ -z "${DB_PASSWORD_KEY_FILE:-}" ]]; then
-    echo "DB_PASSWORD_KEY_FILE is not set. It is required to encrypt passwords." >&2
+  if [[ -z "${DB[password_key_file]:-}" ]]; then
+    echo "DB[password_key_file] is not set. It is required to encrypt passwords." >&2
     return 1
   fi
-  if [[ ! -f "$DB_PASSWORD_KEY_FILE" ]]; then
-    echo "Key file not found: $DB_PASSWORD_KEY_FILE" >&2
+  if [[ ! -f "${DB[password_key_file]}" ]]; then
+    echo "Key file not found: ${DB[password_key_file]}" >&2
     return 1
   fi
 
   mkdir -p "$(dirname "$pwd_file")"
-  printf '%s' "$plain" | openssl des3 -salt -in /dev/stdin -out "$pwd_file" -pass "file:$DB_PASSWORD_KEY_FILE" -pbkdf2 -iter 100000
+  printf '%s' "$plain" | openssl des3 -salt -in /dev/stdin -out "$pwd_file" -pass "file:${DB[password_key_file]}" -pbkdf2 -iter 100000
 }
 
 ## Encrypt a plaintext password into the profile-based .pwd file.

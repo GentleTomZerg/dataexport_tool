@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CTL="$ROOT_DIR/bin/exportctl"
+CTL="$ROOT_DIR/bin/exportctl.sh"
 DEMO_DIR="$ROOT_DIR/etc/demo"
 TMP_DIR="$ROOT_DIR/tmp"
 FAKE_BIN="$TMP_DIR/fake_bin"

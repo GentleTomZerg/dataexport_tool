@@ -52,7 +52,7 @@ job.bad.COLUMNS=id
 job.bad.EXPORT_FILE=${ENV_EXPORT_ROOT}/bad.csv
 EOF
 
-plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
+plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
 assert_contains "== Job: users ==" "$plan_output" "plan includes users"
 assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
 assert_contains "STATUS=FAILED" "$plan_output" "failed job status printed"
@@ -62,16 +62,16 @@ assert_contains "== Environment ==" "$plan_output" "environment block printed"
 assert_contains "ENV_EXPORT_ROOT=./exports" "$plan_output" "export env printed"
 assert_contains "SQL=SELECT id,name FROM users WHERE status = 'active'" "$plan_output" "plan prints sql"
 
-validate_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" validate --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
+validate_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" validate --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
 assert_contains "== Job: users ==" "$validate_output" "validate includes users"
 assert_contains "STATUS=OK" "$validate_output" "validate prints ok status"
 assert_contains "STATUS=FAILED" "$validate_output" "validate prints failed status"
 assert_true "[[ \"$validate_output\" != *\"SQL=\"* ]]" "validate should not print sql"
 
-unknown_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users missing_job 2>&1)"
+unknown_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users missing_job 2>&1)"
 assert_contains "ERROR: unknown selector missing_job" "$unknown_output" "unknown selector logged"
 
-run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users 2>&1)"
+run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users 2>&1)"
 assert_contains "JOB_INFO name=users stage=export_start" "$run_output" "export start log"
 assert_contains "JOB_INFO name=users stage=export_ok file=./exports/users_2026-03-17.csv lines=2" "$run_output" "export metrics log"
 assert_contains "JOB_INFO name=users stage=compress_start file=./exports/users_2026-03-17.csv mode=gz" "$run_output" "compress start log"
@@ -85,8 +85,13 @@ assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv.gz' ]]" "compresse
 assert_true "[[ -f '$PROJECT_DIR/exports_transfer/users_2026-03-17.gz' ]]" "transferred file created"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
-if "$ROOT_DIR/bin/exportctl" run --db-config >/dev/null 2>&1; then
+if "$ROOT_DIR/bin/exportctl.sh" run --db-config >/dev/null 2>&1; then
   echo "FAIL: expected invalid args to exit non-zero" >&2
+  exit 1
+fi
+
+if "$ROOT_DIR/bin/exportctl.sh" password encode >/dev/null 2>&1; then
+  echo "FAIL: expected password command to exit non-zero" >&2
   exit 1
 fi
 

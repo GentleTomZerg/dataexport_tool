@@ -38,7 +38,7 @@ job.orders.COLUMNS=id
 job.orders.EXPORT_FILE=./orders.csv
 EOF
 
-output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" users orders 2>&1)"
+output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" users orders 2>&1)"
 assert_contains "== Job: orders ==" "$output" "orders selected"
 assert_contains "== Job: users ==" "$output" "users selected"
 assert_true "[[ \"$output\" != *\"unknown selector\"* ]]" "known selectors only"

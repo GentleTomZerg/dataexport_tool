@@ -1,6 +1,6 @@
 # Demo Config
 
-This directory is meant for manual checking of `exportctl`.
+This directory is meant for manual checking of `exportctl.sh`.
 
 Files:
 
@@ -8,17 +8,17 @@ Files:
 - `jobs.properties`: jobs covering success, date variables, compression, transfer, alternate DB type, and invalid config
 - includes a MySQL split-column example via `job.article_body.SPLIT.body=4000,3`
 - `env.properties`: output roots used by the demo jobs
-- `pwd/`: expected password-key location for manual password testing
+- `pwd/`: demo password-key location used by DB profile configuration
 
 Useful commands:
 
 ```bash
-bash script/bin/exportctl validate \
+bash script/bin/exportctl.sh validate \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties
 
-bash script/bin/exportctl plan \
+bash script/bin/exportctl.sh plan \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \

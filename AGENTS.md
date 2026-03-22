@@ -2,14 +2,13 @@
 
 ## Current State
 
-The project has been rewritten around `script/bin/exportctl`.
+The project has been rewritten around `script/bin/exportctl.sh`.
 
 Current behavior:
 
 - `validate`: parse config, resolve runtime/env values, build each job plan, print `STATUS=OK` or `STATUS=FAILED`
 - `plan`: print runtime, `ENV_*`, per-job plan details, and SQL
 - `run`: print plan details, execute export, run artifact pipeline, and log stage-level progress
-- `password encode|decode`: manage encrypted password files
 
 Current exit behavior:
 
@@ -18,7 +17,7 @@ Current exit behavior:
 
 ## Ownership Decisions
 
-The recent refactor intentionally moved orchestration concerns into `script/bin/exportctl`.
+The recent refactor intentionally moved orchestration concerns into `script/bin/exportctl.sh`.
 
 Things now owned by `exportctl`:
 
@@ -38,11 +37,11 @@ Things still kept in libraries:
 - SQL rendering: `script/lib/sql/render.sh`
 - DB execution: `script/lib/exec/db.sh`
 - artifact handling: `script/lib/artifact/pipeline.sh`
-- crypto / password helpers: `script/lib/security/*.sh`
 
 ## Important Simplifications Already Made
 
 - removed the old multi-script structure and rebuilt the tool around `exportctl`
+- removed `password encode|decode` from `exportctl`
 - removed group-based job selectors
 - removed the separate selector module
 - removed the separate summary module
@@ -80,10 +79,11 @@ Final batch output:
 - split-column rendering currently only applies to MySQL
 - property expansion only sees explicitly defined properties and exported variables
 - if a rename template references something like `${job.finance.COMPRESS.MODE}`, that property must actually be defined in config
+- `exportctl` is intentionally limited to `validate`, `plan`, and `run`
 
 ## Recent Structural Cleanup
 
-`script/bin/exportctl` has been improved by:
+`script/bin/exportctl.sh` has been improved by:
 
 - introducing an explicit CLI context map instead of file-level `CLI_*` globals
 - removing the fake runtime parameter from `build_export_plan`
@@ -97,8 +97,8 @@ Final batch output:
 
 High priority:
 
-- keep reducing the size and cognitive load of `script/bin/exportctl`
-- tighten naming and section ordering in `script/bin/exportctl`
+- keep reducing the size and cognitive load of `script/bin/exportctl.sh`
+- tighten naming and section ordering in `script/bin/exportctl.sh`
 - review ShellCheck warnings, especially around `local -A`, namerefs, and orchestration helpers
 
 Medium priority:
@@ -114,7 +114,7 @@ Low priority:
 
 ## Recommended Next Steps
 
-1. Clean up `script/bin/exportctl` naming and section ordering.
+1. Clean up `script/bin/exportctl.sh` naming and section ordering.
 2. Run a focused ShellCheck pass and fix only real issues.
 3. Decide whether to keep summary helpers exactly as-is or simplify them further.
 4. Review sample configs under `script/etc/demo` and `script/etc/local`.

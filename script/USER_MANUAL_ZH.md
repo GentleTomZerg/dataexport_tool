@@ -1,6 +1,6 @@
 # 数据导出工具使用手册
 
-本文说明 `script/bin/exportctl` 的所有参数、参数对应的配置文件含义、常见使用方式，以及完整示例。
+本文说明 `script/bin/exportctl.sh` 的所有参数、参数对应的配置文件含义、常见使用方式，以及完整示例。
 
 ## 1. 工具目标
 
@@ -16,19 +16,17 @@
 主入口：
 
 ```bash
-bash script/bin/exportctl ...
+bash script/bin/exportctl.sh ...
 ```
 
 ## 2. 命令总览
 
-`exportctl` 支持四类命令：
+`exportctl.sh` 支持三类命令：
 
 ```bash
-exportctl validate ...
-exportctl plan ...
-exportctl run ...
-exportctl password encode ...
-exportctl password decode ...
+exportctl.sh validate ...
+exportctl.sh plan ...
+exportctl.sh run ...
 ```
 
 它们的区别：
@@ -40,17 +38,13 @@ exportctl password decode ...
   与 `validate` 类似，但会明确打印每个 job 的 SQL、导出目标和解析后的细节。
 - `run`
   真正执行数据库导出，并触发压缩、传输等后处理。
-- `password encode`
-  按 profile 规则生成加密密码文件。
-- `password decode`
-  解密已有密码文件，打印明文。
 
 ## 3. 通用命令格式
 
 ### 3.1 `validate`
 
 ```bash
-bash script/bin/exportctl validate \
+bash script/bin/exportctl.sh validate \
   --db-config FILE \
   --jobs-config FILE \
   [--env-config FILE] \
@@ -61,7 +55,7 @@ bash script/bin/exportctl validate \
 ### 3.2 `plan`
 
 ```bash
-bash script/bin/exportctl plan \
+bash script/bin/exportctl.sh plan \
   --db-config FILE \
   --jobs-config FILE \
   [--env-config FILE] \
@@ -72,30 +66,12 @@ bash script/bin/exportctl plan \
 ### 3.3 `run`
 
 ```bash
-bash script/bin/exportctl run \
+bash script/bin/exportctl.sh run \
   --db-config FILE \
   --jobs-config FILE \
   [--env-config FILE] \
   [--date YYYY-MM-DD] \
   [job selectors...]
-```
-
-### 3.4 `password encode`
-
-```bash
-bash script/bin/exportctl password encode \
-  --db-config FILE \
-  --db-profile PROFILE \
-  --password VALUE \
-  --key-file FILE
-```
-
-### 3.5 `password decode`
-
-```bash
-bash script/bin/exportctl password decode \
-  --password-file FILE \
-  --key-file FILE
 ```
 
 ## 4. 所有参数的详细说明
@@ -274,8 +250,8 @@ job.audit.EXPORT_FILE=./archive/audit_${EXPORT_MONTH}.csv
 示例：
 
 ```bash
-bash script/bin/exportctl plan ... users
-bash script/bin/exportctl run ... users orders
+bash script/bin/exportctl.sh plan ... users
+bash script/bin/exportctl.sh run ... users orders
 ```
 
 #### 4.5.1 直接写 job 名
@@ -283,7 +259,7 @@ bash script/bin/exportctl run ... users orders
 例如：
 
 ```bash
-bash script/bin/exportctl run ... users
+bash script/bin/exportctl.sh run ... users
 ```
 
 表示：
@@ -294,87 +270,6 @@ bash script/bin/exportctl run ... users
 
 - 只记录错误日志
 - 不会因为 unknown selector 直接退出
-
-### 4.6 `--db-profile PROFILE`
-
-只用于：
-
-- `password encode`
-
-作用：
-
-- 指定要使用哪个 DB profile 生成密码文件
-
-例如：
-
-```bash
-bash script/bin/exportctl password encode \
-  --db-config script/etc/demo/db.properties \
-  --db-profile primary \
-  --password 'secret123' \
-  --key-file script/etc/demo/pwd/key_file
-```
-
-程序会根据 `primary` profile 的 host、port、user、password_dir 拼出密码文件名。
-
-例如可能写入：
-
-```text
-script/etc/demo/pwd/localhost_3306_demo_user.pwd
-```
-
-### 4.7 `--password VALUE`
-
-只用于：
-
-- `password encode`
-
-作用：
-
-- 指定要加密写入密码文件的明文密码
-
-注意：
-
-- 这个参数会直接出现在 shell 历史中
-- 如果你在生产环境操作，应评估 shell history 风险
-
-### 4.8 `--key-file FILE`
-
-用于：
-
-- `password encode`
-- `password decode`
-
-作用：
-
-- 指定 OpenSSL 使用的密钥文件路径
-
-它指向什么：
-
-- 一个已有的本地文件
-
-使用方式：
-
-- encode 时，用它加密
-- decode 时，用它解密
-
-### 4.9 `--password-file FILE`
-
-只用于：
-
-- `password decode`
-
-作用：
-
-- 指定一个已经存在的 `.pwd` 加密密码文件
-
-例如：
-
-```bash
-bash script/bin/exportctl password decode \
-  --password-file script/etc/demo/pwd/localhost_3306_demo_user.pwd \
-  --key-file script/etc/demo/pwd/key_file
-```
 
 ## 5. 配置文件写法详解
 
@@ -417,9 +312,9 @@ primary.DB_PASSWORD_KEY_FILE=./script/etc/demo/pwd/key_file
 - `DB_TYPE`
   当前只支持 `mysql` 和 `postgres`
 - `DB_PASSWORD_DIR`
-  密码文件目录
+  密码文件目录，由数据库执行层读取
 - `DB_PASSWORD_KEY_FILE`
-  密钥文件路径
+  密钥文件路径，由数据库执行层读取
 
 ### 5.2 Job 配置
 
@@ -668,7 +563,6 @@ FAILED_JOBS=invalid_missing_profile invalid_unknown_profile
 - 没传 `--db-config`
 - 没传 `--jobs-config`
 - `--date` 不是 `YYYY-MM-DD`
-- `password encode` 缺 `--db-profile`
 
 ### 7.2 仍然返回 `0` 的情况
 
@@ -690,7 +584,7 @@ FAILED_JOBS=invalid_missing_profile invalid_unknown_profile
 ### 8.1 检查所有 job 是否能解析
 
 ```bash
-bash script/bin/exportctl validate \
+bash script/bin/exportctl.sh validate \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
@@ -705,7 +599,7 @@ bash script/bin/exportctl validate \
 ### 8.2 只看某几个 job 的 SQL
 
 ```bash
-bash script/bin/exportctl plan \
+bash script/bin/exportctl.sh plan \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
@@ -722,7 +616,7 @@ bash script/bin/exportctl plan \
 ### 8.3 混合 selector
 
 ```bash
-bash script/bin/exportctl plan \
+bash script/bin/exportctl.sh plan \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
@@ -739,7 +633,7 @@ bash script/bin/exportctl plan \
 ### 8.4 真正执行导出
 
 ```bash
-bash script/bin/exportctl run \
+bash script/bin/exportctl.sh run \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
@@ -751,32 +645,6 @@ bash script/bin/exportctl run \
 
 - 真正导出并生成文件
 - 需要结合本机 `mysql` 或 `psql` 客户端使用
-
-### 8.5 生成密码文件
-
-```bash
-bash script/bin/exportctl password encode \
-  --db-config script/etc/demo/db.properties \
-  --db-profile primary \
-  --password 'secret123' \
-  --key-file script/etc/demo/pwd/key_file
-```
-
-适用场景：
-
-- 首次准备数据库密码文件
-
-### 8.6 解密查看密码文件
-
-```bash
-bash script/bin/exportctl password decode \
-  --password-file script/etc/demo/pwd/localhost_3306_demo_user.pwd \
-  --key-file script/etc/demo/pwd/key_file
-```
-
-适用场景：
-
-- 验证密码文件是否可解密
 
 ## 9. 推荐的手工检查方式
 
@@ -799,7 +667,7 @@ bash script/bin/demo_exportctl.sh
 3. 再手动跑单个命令
 
 ```bash
-bash script/bin/exportctl plan \
+bash script/bin/exportctl.sh plan \
   --db-config script/etc/demo/db.properties \
   --jobs-config script/etc/demo/jobs.properties \
   --env-config script/etc/demo/env.properties \
@@ -807,7 +675,7 @@ bash script/bin/exportctl plan \
   users
 ```
 
-4. 如果要接真实数据库，再替换 `db.properties` 和密码文件
+4. 如果要接真实数据库，再替换 `db.properties` 和相关密码文件配置
 
 ## 10. 当前设计限制
 

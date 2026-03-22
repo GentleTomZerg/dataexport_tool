@@ -128,40 +128,63 @@ ENV_EXPORT_ROOT=./exports
 bash script/bin/exportctl.sh run ... users orders
 ```
 
-## 5. 高级配置
+## 5. 配置字段参考
 
-### 5.1 列拆分（仅 MySQL）
+### 5.1 DB Profile 必填字段
 
-拆分大字段为多列：
+| 字段 | 说明 | 示例 |
+|-----|------|------|
+| `<profile>.DB_HOST` | 数据库主机 | `localhost` |
+| `<profile>.DB_PORT` | 端口 | `3306` |
+| `<profile>.DB_NAME` | 数据库名 | `demo_db` |
+| `<profile>.DB_USER` | 用户名 | `demo_user` |
+| `<profile>.DB_TYPE` | 类型 | `mysql` 或 `postgres` |
+| `<profile>.DB_PASSWORD_DIR` | 密码目录 | `./pwd` |
+| `<profile>.DB_PASSWORD_KEY_FILE` | 密钥文件 | `./pwd/keyfile` |
 
-```properties
-job.users.SPLIT.blog=10000,3
-```
+### 5.2 Job 必填字段
+
+| 字段 | 说明 | 示例 |
+|-----|------|------|
+| `job.<name>.DB_PROFILE` | 引用 DB profile | `primary` |
+| `job.<name>.TABLE_NAME` | 表名 | `users` |
+| `job.<name>.COLUMNS` | 列名 | `id,name,email` |
+| `job.<name>.EXPORT_FILE` | 导出路径 | `./exports/users.csv` |
+
+### 5.3 Job 可选字段及默认值
+
+| 字段 | 默认值 | 说明 |
+|-----|-------|------|
+| `job.<name>.WHERE` | 空 | SQL 条件，原样拼入 |
+| `job.<name>.FIELD_SEPARATOR` | `\t` | 字段分隔符 |
+| `job.<name>.LINE_TERMINATOR` | `\n` | 行终止符 |
+| `job.<name>.COMPRESS.ENABLED` | `false` | 是否启用压缩 |
+| `job.<name>.COMPRESS.MODE` | `tar.gz` | 压缩格式：`gz`, `tar`, `tar.gz`, `tgz` |
+| `job.<name>.COMPRESS.OVERWRITE` | `false` | 压缩文件存在时覆盖 |
+| `job.<name>.COMPRESS.REMOVE_ORIGINAL` | `false` | 压缩后删除原文件 |
+| `job.<name>.TRANSFER.ENABLED` | `false` | 是否启用传输 |
+| `job.<name>.TRANSFER.DIR` | 空 | 传输目标目录 |
+| `job.<name>.TRANSFER.MODE` | `move` | 传输模式：`copy` 或 `move` |
+| `job.<name>.TRANSFER.OVERWRITE` | `false` | 目标文件存在时覆盖 |
+| `job.<name>.TRANSFER.RENAME` | 空 | 目标文件名模板 |
+| `job.<name>.SPLIT.<column>` | 无 | 列拆分：`chunk_size,chunks` |
+
+### 5.4 列拆分说明
+
+格式：`job.<name>.SPLIT.<column>=chunk_size,chunks`
+
+示例：`job.users.SPLIT.blog=10000,3`
 
 生成 SQL：
-
 ```sql
-SELECT id,name,SUBSTRING(blog, 1, 10000) AS blog_part1,...
+SELECT id,name,SUBSTRING(blog, 1, 10000) AS blog_part1,
+       SUBSTRING(blog, 10001, 10000) AS blog_part2,
+       SUBSTRING(blog, 20001, 10000) AS blog_part3,...
 ```
 
-### 5.2 压缩配置
+注意：被拆分的列必须已在 `COLUMNS` 中声明。仅 MySQL 支持。
 
-```properties
-job.users.COMPRESS.ENABLED=true
-job.users.COMPRESS.MODE=gz
-job.users.COMPRESS.OVERWRITE=true
-```
-
-### 5.3 传输配置
-
-```properties
-job.users.TRANSFER.ENABLED=true
-job.users.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
-job.users.TRANSFER.MODE=copy
-job.users.TRANSFER.RENAME=users_${EXPORT_DATE}.gz
-```
-
-## 6. 输出示例
+## 7. 输出示例
 
 ### validate 输出
 
@@ -203,12 +226,12 @@ Summary: total=1 ok=1 failed=0
 Summary: total=1 ok=1 failed=0
 ```
 
-## 7. 退出码
+## 8. 退出码
 
 - 返回 `1`：命令行参数错误（缺少必填参数、日期格式错误等）
 - 返回 `0`：其他所有情况（即使 job 失败）
 
-## 8. 配置文件位置
+## 9. 配置文件位置
 
 | 配置文件 | 路径 |
 |---------|------|
@@ -216,7 +239,7 @@ Summary: total=1 ok=1 failed=0
 | Job 配置 | `etc/local/jobs.properties` |
 | 环境变量 | `etc/env.properties` |
 
-## 9. 测试验证
+## 10. 测试验证
 
 运行测试套件：
 
@@ -224,7 +247,7 @@ Summary: total=1 ok=1 failed=0
 bash script/test/run_all.sh
 ```
 
-## 10. 限制
+## 11. 限制
 
 - `WHERE` 是原始 SQL，不做校验
 - 只支持 `mysql` 和 `postgres`

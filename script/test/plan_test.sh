@@ -5,7 +5,6 @@ shopt -s extglob
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
-source "$ROOT_DIR/lib/config/runtime.sh"
 source "$ROOT_DIR/lib/export/plan.sh"
 source "$ROOT_DIR/lib/sql/render.sh"
 
@@ -38,8 +37,14 @@ declare -A JOB=()
 declare -A PLAN=()
 
 load_props_from_file "$TMP_DIR/all.properties" PROPS
-init_runtime_context "2026-03-17" RUNTIME
-build_export_plan PROPS RUNTIME users PROFILE JOB PLAN
+EXPORT_DATE="2026-03-17"
+TODAY="2026-03-17"
+YESTERDAY="2026-03-16"
+EXPORT_MONTH="2026-03"
+MONTH_START="2026-03-01"
+MONTH_END="2026-03-31"
+export EXPORT_DATE TODAY YESTERDAY EXPORT_MONTH MONTH_START MONTH_END
+build_export_plan PROPS users PROFILE JOB PLAN
 PLAN[sql]="$(render_select_sql PLAN)"
 
 assert_eq "./exports/users_2026-03-17.csv" "${PLAN[export_file]}" "expanded export file"

@@ -87,13 +87,13 @@ main() {
   fi
 
   case "${cli[cmd]}" in
-    validate|plan|run)
-      run_export_command cli selectors
-      ;;
-    *)
-      usage >&2
-      exit 1
-      ;;
+  validate | plan | run)
+    run_export_command cli selectors
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
   esac
 }
 
@@ -118,30 +118,6 @@ print_plan() {
   printf '\n'
 }
 
-print_job_header() {
-  local job_name="$1"
-
-  printf '== Job: %s ==\n' "$job_name"
-}
-
-print_validate_ok() {
-  printf 'STATUS=OK\n\n'
-}
-
-print_job_note() {
-  local job_name="$1"
-  local message="$2"
-
-  printf '[%s] %s\n' "$job_name" "$message"
-}
-
-print_job_error() {
-  local job_name="$1"
-  local message="$2"
-
-  printf '[%s] %s\n' "$job_name" "$message" >&2
-}
-
 file_line_count() {
   local path="$1"
 
@@ -154,12 +130,6 @@ file_byte_size() {
   wc -c <"$path" | tr -d '[:space:]'
 }
 
-record_plan_failure() {
-  local job_name="$1"
-  printf 'STATUS=FAILED\n\n'
-  print_job_error "$job_name" 'Plan build failed.'
-}
-
 execute_run_mode() {
   local plan_name="$1"
   local profile_name="$2"
@@ -169,27 +139,27 @@ execute_run_mode() {
 
   print_plan "$plan_name"
 
-  print_job_note "$job_name" "Starting export: db_type=${job_plan[db_type]} file=${job_plan[export_file]}"
+  printf '[%s] Starting export: db_type=%s file=%s\n' "$job_name" "${job_plan[db_type]}" "${job_plan[export_file]}"
   if ! execute_plan_export "$plan_name" "$profile_name"; then
-    print_job_error "$job_name" 'Export failed.'
+    printf '[%s] Export failed.\n' "$job_name" >&2
     return 1
   fi
 
   export_lines="$(file_line_count "${job_plan[export_file]}")"
   export_bytes="$(file_byte_size "${job_plan[export_file]}")"
-  print_job_note "$job_name" "Export finished: file=${job_plan[export_file]} lines=${export_lines} bytes=${export_bytes}"
+  printf '[%s] Export finished: file=%s lines=%s bytes=%s\n' "$job_name" "${job_plan[export_file]}" "$export_lines" "$export_bytes"
 
   if ! run_artifact_pipeline "$plan_name"; then
-    print_job_error "$job_name" 'Artifact pipeline failed.'
+    printf '[%s] Artifact pipeline failed.\n' "$job_name" >&2
     return 1
   fi
 
   if [[ -n "${job_plan[artifact_path]:-}" && -f "${job_plan[artifact_path]}" ]]; then
     artifact_bytes="$(file_byte_size "${job_plan[artifact_path]}")"
-    print_job_note "$job_name" "Final artifact ready: file=${job_plan[artifact_path]} bytes=${artifact_bytes}"
+    printf '[%s] Final artifact ready: file=%s bytes=%s\n' "$job_name" "${job_plan[artifact_path]}" "$artifact_bytes"
   fi
 
-  print_job_note "$job_name" 'Completed successfully.'
+  printf '[%s] Completed successfully.\n' "$job_name"
 }
 
 process_job() {
@@ -201,28 +171,27 @@ process_job() {
   local -A job=()
   local -A plan=()
 
-  print_job_header "$job_name"
+  printf '== Job: %s ==\n' "$job_name"
 
   if ! build_export_plan "$props_name" "$job_name" profile job plan; then
-    record_plan_failure "$job_name"
+    printf '[%s] Plan build failed.\n' "$job_name" >&2
     return 1
   fi
 
   plan[sql]="$(render_select_sql plan)"
 
   case "${cli_ctx[cmd]}" in
-    validate)
-      print_validate_ok
-      print_job_note "$job_name" 'Validation succeeded.'
-      ;;
-    plan)
-      print_plan plan
-      print_job_note "$job_name" 'Plan generated.'
-      ;;
-    run)
-      execute_run_mode plan profile "$job_name"
-      return $?
-      ;;
+  validate)
+    printf '[%s] Validation succeeded.\n' "$job_name"
+    ;;
+  plan)
+    print_plan plan
+    printf '[%s] Plan generated.\n' "$job_name"
+    ;;
+  run)
+    execute_run_mode plan profile "$job_name"
+    return $?
+    ;;
   esac
 
   return 0
@@ -416,33 +385,33 @@ parse_export_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --db-config)
-        args_require_value "$@" || return 1
-        cli_ctx[db_config]="$2"
-        shift 2
-        ;;
-      --jobs-config)
-        args_require_value "$@" || return 1
-        cli_ctx[jobs_config]="$2"
-        shift 2
-        ;;
-      --env-config)
-        args_require_value "$@" || return 1
-        cli_ctx[env_config]="$2"
-        shift 2
-        ;;
-      --date)
-        args_require_value "$@" || return 1
-        cli_ctx[date]="$2"
-        shift 2
-        ;;
-      -h|--help)
-        return 1
-        ;;
-      *)
-        requested_selectors+=("$1")
-        shift
-        ;;
+    --db-config)
+      args_require_value "$@" || return 1
+      cli_ctx[db_config]="$2"
+      shift 2
+      ;;
+    --jobs-config)
+      args_require_value "$@" || return 1
+      cli_ctx[jobs_config]="$2"
+      shift 2
+      ;;
+    --env-config)
+      args_require_value "$@" || return 1
+      cli_ctx[env_config]="$2"
+      shift 2
+      ;;
+    --date)
+      args_require_value "$@" || return 1
+      cli_ctx[date]="$2"
+      shift 2
+      ;;
+    -h | --help)
+      return 1
+      ;;
+    *)
+      requested_selectors+=("$1")
+      shift
+      ;;
     esac
   done
 
@@ -463,12 +432,12 @@ parse_exportctl_args() {
   shift
 
   case "${cli_ctx[cmd]}" in
-    validate|plan|run)
-      parse_export_args "$cli_name" "$selectors_name" "$@"
-      ;;
-    *)
-      return 1
-      ;;
+  validate | plan | run)
+    parse_export_args "$cli_name" "$selectors_name" "$@"
+    ;;
+  *)
+    return 1
+    ;;
   esac
 }
 

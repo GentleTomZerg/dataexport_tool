@@ -39,11 +39,11 @@ EOF
 
 run_export_command() {
   local cli_name="$1"
-  local selectors_name="$2"
+  local requested_jobs_name="$2"
   local -n cli_ctx="$cli_name"
   local -A props=()
   local -A runtime=()
-  local -a runnable_jobs=()
+  local -a resolved_jobs=()
   local -a failed_jobs=()
   local total_jobs=0
   local ok_jobs=0
@@ -52,9 +52,9 @@ run_export_command() {
 
   init_runtime_context "${cli_ctx[date]:-}" runtime
   load_all_properties "$cli_name" props
-  resolve_job_selectors props "$selectors_name" runnable_jobs
+  resolve_requested_jobs props "$requested_jobs_name" resolved_jobs
 
-  if [[ "${#runnable_jobs[@]}" -eq 0 ]]; then
+  if [[ "${#resolved_jobs[@]}" -eq 0 ]]; then
     printf 'No runnable jobs resolved.\n' >&2
     print_summary "$total_jobs" "$ok_jobs" "$failed_count" failed_jobs
     return 0
@@ -63,7 +63,7 @@ run_export_command() {
   print_runtime_context runtime
   print_env_properties props
 
-  for job_name in "${runnable_jobs[@]}"; do
+  for job_name in "${resolved_jobs[@]}"; do
     total_jobs=$((total_jobs + 1))
     if process_job "$cli_name" props "$job_name"; then
       ok_jobs=$((ok_jobs + 1))
@@ -79,16 +79,16 @@ run_export_command() {
 
 main() {
   local -A cli=()
-  local -a selectors=()
+  local -a requested_jobs=()
 
-  if ! parse_exportctl_args cli selectors "$@"; then
+  if ! parse_exportctl_args cli requested_jobs "$@"; then
     usage >&2
     exit 1
   fi
 
   case "${cli[cmd]}" in
   validate | plan | run)
-    run_export_command cli selectors
+    run_export_command cli requested_jobs
     ;;
   *)
     usage >&2
@@ -312,41 +312,41 @@ load_all_properties() {
   load_props_from_file "${cli_ctx[jobs_config]}" "$props_name"
 }
 
-resolve_job_selectors() {
+resolve_requested_jobs() {
   local props_name="$1"
-  local selectors_name="$2"
-  local out_name="$3"
-  local -n requested_selectors="$selectors_name"
-  local -n resolved_jobs="$out_name"
-  local selector job_name
-  local -a all_jobs=()
-  local -A selected=()
-  local -A known=()
+  local requested_jobs_name="$2"
+  local resolved_jobs_name="$3"
+  local -n requested_jobs_ref="$requested_jobs_name"
+  local -n resolved_jobs_ref="$resolved_jobs_name"
+  local requested_job job_name
+  local -a configured_jobs=()
+  local -A requested_lookup=()
+  local -A configured_lookup=()
 
-  mapfile -t all_jobs < <(list_export_jobs "$props_name")
-  for job_name in "${all_jobs[@]}"; do
-    known["$job_name"]=1
+  mapfile -t configured_jobs < <(list_export_jobs "$props_name")
+  for job_name in "${configured_jobs[@]}"; do
+    configured_lookup["$job_name"]=1
   done
 
-  if [[ "${#requested_selectors[@]}" -eq 0 ]]; then
-    resolved_jobs=("${all_jobs[@]}")
+  if [[ "${#requested_jobs_ref[@]}" -eq 0 ]]; then
+    resolved_jobs_ref=("${configured_jobs[@]}")
     return 0
   fi
 
-  for selector in "${requested_selectors[@]}"; do
-    if [[ -n "${known[$selector]:-}" ]]; then
-      selected["$selector"]=1
+  for requested_job in "${requested_jobs_ref[@]}"; do
+    if [[ -n "${configured_lookup[$requested_job]:-}" ]]; then
+      requested_lookup["$requested_job"]=1
     else
-      printf 'ERROR: unknown selector %s\n' "$selector" >&2
+      printf 'ERROR: unknown job %s\n' "$requested_job" >&2
     fi
   done
 
-  resolved_jobs=()
-  for job_name in "${!selected[@]}"; do
-    resolved_jobs+=("$job_name")
+  resolved_jobs_ref=()
+  for job_name in "${!requested_lookup[@]}"; do
+    resolved_jobs_ref+=("$job_name")
   done
-  if [[ "${#resolved_jobs[@]}" -gt 0 ]]; then
-    mapfile -t resolved_jobs < <(printf '%s\n' "${resolved_jobs[@]}" | sort)
+  if [[ "${#resolved_jobs_ref[@]}" -gt 0 ]]; then
+    mapfile -t resolved_jobs_ref < <(printf '%s\n' "${resolved_jobs_ref[@]}" | sort)
   fi
 }
 
@@ -364,24 +364,24 @@ args_validate_date() {
 
 init_cli_context() {
   local cli_name="$1"
-  local selectors_name="$2"
+  local requested_jobs_name="$2"
   local -n cli_ctx="$cli_name"
-  local -n requested_selectors="$selectors_name"
+  local -n requested_jobs_ref="$requested_jobs_name"
 
   cli_ctx[cmd]=""
   cli_ctx[db_config]=""
   cli_ctx[jobs_config]=""
   cli_ctx[env_config]=""
   cli_ctx[date]=""
-  requested_selectors=()
+  requested_jobs_ref=()
 }
 
 parse_export_args() {
   local cli_name="$1"
-  local selectors_name="$2"
+  local requested_jobs_name="$2"
   shift 2
   local -n cli_ctx="$cli_name"
-  local -n requested_selectors="$selectors_name"
+  local -n requested_jobs_ref="$requested_jobs_name"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -409,7 +409,7 @@ parse_export_args() {
       return 1
       ;;
     *)
-      requested_selectors+=("$1")
+      requested_jobs_ref+=("$1")
       shift
       ;;
     esac
@@ -421,11 +421,11 @@ parse_export_args() {
 
 parse_exportctl_args() {
   local cli_name="$1"
-  local selectors_name="$2"
+  local requested_jobs_name="$2"
   shift 2
   local -n cli_ctx="$cli_name"
 
-  init_cli_context "$cli_name" "$selectors_name"
+  init_cli_context "$cli_name" "$requested_jobs_name"
 
   cli_ctx[cmd]="${1:-}"
   [[ -n "${cli_ctx[cmd]}" ]] || return 1
@@ -433,7 +433,7 @@ parse_exportctl_args() {
 
   case "${cli_ctx[cmd]}" in
   validate | plan | run)
-    parse_export_args "$cli_name" "$selectors_name" "$@"
+    parse_export_args "$cli_name" "$requested_jobs_name" "$@"
     ;;
   *)
     return 1

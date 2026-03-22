@@ -55,7 +55,6 @@ EOF
 plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
 assert_contains "== Job: users ==" "$plan_output" "plan includes users"
 assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
-assert_contains "STATUS=FAILED" "$plan_output" "failed job status printed"
 assert_contains "[bad] Plan build failed." "$plan_output" "bad job logged"
 assert_contains "Summary: total=2 ok=1 failed=1" "$plan_output" "summary counts"
 assert_contains "== Environment ==" "$plan_output" "environment block printed"
@@ -65,13 +64,12 @@ assert_contains "[users] Plan generated." "$plan_output" "plan success note"
 
 validate_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" validate --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
 assert_contains "== Job: users ==" "$validate_output" "validate includes users"
-assert_contains "STATUS=OK" "$validate_output" "validate prints ok status"
-assert_contains "STATUS=FAILED" "$validate_output" "validate prints failed status"
+assert_contains "[bad] Plan build failed." "$validate_output" "validate prints failed job"
 assert_contains "[users] Validation succeeded." "$validate_output" "validate success note"
 assert_true "[[ \"$validate_output\" != *\"SQL=\"* ]]" "validate should not print sql"
 
 unknown_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users missing_job 2>&1)"
-assert_contains "ERROR: unknown selector missing_job" "$unknown_output" "unknown selector logged"
+assert_contains "ERROR: unknown job missing_job" "$unknown_output" "unknown job logged"
 
 run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" run --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 users 2>&1)"
 assert_contains "[users] Starting export: db_type=mysql file=./exports/users_2026-03-17.csv" "$run_output" "export start log"

@@ -3,7 +3,6 @@
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/common/strict.sh"
-source "$ROOT_DIR/lib/common/log.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
 source "$ROOT_DIR/lib/export/profile.sh"
 source "$ROOT_DIR/lib/export/job.sh"
@@ -44,18 +43,20 @@ run_export_command() {
   local -n cli_ctx="$cli_name"
   local -A props=()
   local -A runtime=()
-  local -A summary=()
   local -a runnable_jobs=()
+  local -a failed_jobs=()
+  local total_jobs=0
+  local ok_jobs=0
+  local failed_count=0
   local job_name
 
   init_runtime_context "${cli_ctx[date]:-}" runtime
   load_all_properties "$cli_name" props
   resolve_job_selectors props "$selectors_name" runnable_jobs
-  summary_init summary
 
   if [[ "${#runnable_jobs[@]}" -eq 0 ]]; then
-    log_error "no runnable jobs resolved"
-    print_summary summary
+    printf 'No runnable jobs resolved.\n' >&2
+    print_summary "$total_jobs" "$ok_jobs" "$failed_count" failed_jobs
     return 0
   fi
 
@@ -63,10 +64,16 @@ run_export_command() {
   print_env_properties props
 
   for job_name in "${runnable_jobs[@]}"; do
-    process_job "$cli_name" props "$job_name" summary
+    total_jobs=$((total_jobs + 1))
+    if process_job "$cli_name" props "$job_name"; then
+      ok_jobs=$((ok_jobs + 1))
+    else
+      failed_count=$((failed_count + 1))
+      failed_jobs+=("$job_name")
+    fi
   done
 
-  print_summary summary
+  print_summary "$total_jobs" "$ok_jobs" "$failed_count" failed_jobs
   return 0
 }
 
@@ -121,6 +128,20 @@ print_validate_ok() {
   printf 'STATUS=OK\n\n'
 }
 
+print_job_note() {
+  local job_name="$1"
+  local message="$2"
+
+  printf '[%s] %s\n' "$job_name" "$message"
+}
+
+print_job_error() {
+  local job_name="$1"
+  local message="$2"
+
+  printf '[%s] %s\n' "$job_name" "$message" >&2
+}
+
 file_line_count() {
   local path="$1"
 
@@ -134,50 +155,47 @@ file_byte_size() {
 }
 
 record_plan_failure() {
-  local summary_name="$1"
-  local job_name="$2"
-
+  local job_name="$1"
   printf 'STATUS=FAILED\n\n'
-  log_job_error "$job_name" "stage=plan reason=plan build failed"
-  summary_mark_failed "$summary_name" "$job_name"
+  print_job_error "$job_name" 'Plan build failed.'
 }
 
 execute_run_mode() {
   local plan_name="$1"
   local profile_name="$2"
-  local summary_name="$3"
-  local job_name="$4"
+  local job_name="$3"
   local -n job_plan="$plan_name"
+  local export_lines export_bytes artifact_bytes
 
   print_plan "$plan_name"
 
-  log_job_info "$job_name" "stage=export_start db_type=${job_plan[db_type]} file=${job_plan[export_file]}"
+  print_job_note "$job_name" "Starting export: db_type=${job_plan[db_type]} file=${job_plan[export_file]}"
   if ! execute_plan_export "$plan_name" "$profile_name"; then
-    log_job_error "$job_name" "stage=export reason=db export failed"
-    summary_mark_failed "$summary_name" "$job_name"
-    return 0
+    print_job_error "$job_name" 'Export failed.'
+    return 1
   fi
 
-  log_job_info "$job_name" "stage=export_ok file=${job_plan[export_file]} lines=$(file_line_count "${job_plan[export_file]}") bytes=$(file_byte_size "${job_plan[export_file]}")"
+  export_lines="$(file_line_count "${job_plan[export_file]}")"
+  export_bytes="$(file_byte_size "${job_plan[export_file]}")"
+  print_job_note "$job_name" "Export finished: file=${job_plan[export_file]} lines=${export_lines} bytes=${export_bytes}"
 
   if ! run_artifact_pipeline "$plan_name"; then
-    log_job_error "$job_name" "stage=artifact reason=post export pipeline failed"
-    summary_mark_failed "$summary_name" "$job_name"
-    return 0
+    print_job_error "$job_name" 'Artifact pipeline failed.'
+    return 1
   fi
 
   if [[ -n "${job_plan[artifact_path]:-}" && -f "${job_plan[artifact_path]}" ]]; then
-    log_job_info "$job_name" "stage=artifact_ok file=${job_plan[artifact_path]} bytes=$(file_byte_size "${job_plan[artifact_path]}")"
+    artifact_bytes="$(file_byte_size "${job_plan[artifact_path]}")"
+    print_job_note "$job_name" "Final artifact ready: file=${job_plan[artifact_path]} bytes=${artifact_bytes}"
   fi
 
-  summary_mark_ok "$summary_name" "$job_name"
+  print_job_note "$job_name" 'Completed successfully.'
 }
 
 process_job() {
   local cli_name="$1"
   local props_name="$2"
   local job_name="$3"
-  local summary_name="$4"
   local -n cli_ctx="$cli_name"
   local -A profile=()
   local -A job=()
@@ -186,8 +204,8 @@ process_job() {
   print_job_header "$job_name"
 
   if ! build_export_plan "$props_name" "$job_name" profile job plan; then
-    record_plan_failure "$summary_name" "$job_name"
-    return 0
+    record_plan_failure "$job_name"
+    return 1
   fi
 
   plan[sql]="$(render_select_sql plan)"
@@ -195,62 +213,35 @@ process_job() {
   case "${cli_ctx[cmd]}" in
     validate)
       print_validate_ok
-      summary_mark_ok "$summary_name" "$job_name"
+      print_job_note "$job_name" 'Validation succeeded.'
       ;;
     plan)
       print_plan plan
-      summary_mark_ok "$summary_name" "$job_name"
+      print_job_note "$job_name" 'Plan generated.'
       ;;
     run)
-      execute_run_mode plan profile "$summary_name" "$job_name"
+      execute_run_mode plan profile "$job_name"
+      return $?
       ;;
   esac
+
+  return 0
 }
 
 ###############################################################################
-# Summary Helpers
+# Batch Summary
 ###############################################################################
-
-summary_init() {
-  local summary_name="$1"
-  local -n summary_ctx="$summary_name"
-
-  summary_ctx[total]=0
-  summary_ctx[ok]=0
-  summary_ctx[failed]=0
-  summary_ctx[failed_jobs]=""
-}
-
-summary_mark_ok() {
-  local summary_name="$1"
-  local job_name="$2"
-  local -n summary_ctx="$summary_name"
-
-  summary_ctx[total]=$((summary_ctx[total] + 1))
-  summary_ctx[ok]=$((summary_ctx[ok] + 1))
-  log_job_ok "$job_name" "stage=complete"
-}
-
-summary_mark_failed() {
-  local summary_name="$1"
-  local job_name="$2"
-  local -n summary_ctx="$summary_name"
-
-  summary_ctx[total]=$((summary_ctx[total] + 1))
-  summary_ctx[failed]=$((summary_ctx[failed] + 1))
-  if [[ -n "${summary_ctx[failed_jobs]}" ]]; then
-    summary_ctx[failed_jobs]+=" "
-  fi
-  summary_ctx[failed_jobs]+="$job_name"
-}
 
 print_summary() {
-  local summary_name="$1"
-  local -n summary_ctx="$summary_name"
+  local total_jobs="$1"
+  local ok_jobs="$2"
+  local failed_count="$3"
+  local failed_jobs_name="$4"
+  local -n failed_jobs_ref="$failed_jobs_name"
 
-  printf 'SUMMARY total=%s ok=%s failed=%s\n' "${summary_ctx[total]}" "${summary_ctx[ok]}" "${summary_ctx[failed]}"
-  if [[ -n "${summary_ctx[failed_jobs]}" ]]; then
-    printf 'FAILED_JOBS=%s\n' "${summary_ctx[failed_jobs]}"
+  printf 'Summary: total=%s ok=%s failed=%s\n' "$total_jobs" "$ok_jobs" "$failed_count"
+  if [[ "${#failed_jobs_ref[@]}" -gt 0 ]]; then
+    printf 'Failed jobs: %s\n' "${failed_jobs_ref[*]}"
   fi
 }
 

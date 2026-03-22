@@ -4,7 +4,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/common/strict.sh"
 source "$ROOT_DIR/lib/common/log.sh"
-source "$ROOT_DIR/lib/common/args.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
 source "$ROOT_DIR/lib/config/runtime.sh"
 source "$ROOT_DIR/lib/export/profile.sh"
@@ -18,6 +17,120 @@ source "$ROOT_DIR/lib/export/summary.sh"
 source "$ROOT_DIR/lib/security/crypto.sh"
 
 setup_shell
+
+args_require_value() {
+  [[ $# -ge 2 && -n "${2:-}" && "${2:0:1}" != "-" ]]
+}
+
+args_validate_date() {
+  [[ -z "$1" || "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
+}
+
+parse_exportctl_args() {
+  local cli_name="$1"
+  local selectors_name="$2"
+  shift 2 || true
+  local -n _cli="$cli_name"
+  local -n _selectors="$selectors_name"
+
+  _cli[cmd]="${1:-}"
+  [[ -n "${_cli[cmd]}" ]] || return 1
+  shift || true
+
+  _cli[subcmd]=""
+  _cli[db_config]=""
+  _cli[jobs_config]=""
+  _cli[env_config]=""
+  _cli[date]=""
+  _cli[db_profile]=""
+  _cli[password]=""
+  _cli[key_file]=""
+  _cli[password_file]=""
+  _selectors=()
+
+  case "${_cli[cmd]}" in
+    validate|plan|run)
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --db-config)
+            args_require_value "$@" || return 1
+            _cli[db_config]="$2"
+            shift 2
+            ;;
+          --jobs-config)
+            args_require_value "$@" || return 1
+            _cli[jobs_config]="$2"
+            shift 2
+            ;;
+          --env-config)
+            args_require_value "$@" || return 1
+            _cli[env_config]="$2"
+            shift 2
+            ;;
+          --date)
+            args_require_value "$@" || return 1
+            _cli[date]="$2"
+            shift 2
+            ;;
+          -h|--help)
+            return 1
+            ;;
+          *)
+            _selectors+=("$1")
+            shift
+            ;;
+        esac
+      done
+      [[ -n "${_cli[db_config]}" && -n "${_cli[jobs_config]}" ]] || return 1
+      args_validate_date "${_cli[date]}" || return 1
+      ;;
+    password)
+      _cli[subcmd]="${1:-}"
+      [[ "${_cli[subcmd]}" == "encode" || "${_cli[subcmd]}" == "decode" ]] || return 1
+      shift || true
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --db-config)
+            args_require_value "$@" || return 1
+            _cli[db_config]="$2"
+            shift 2
+            ;;
+          --db-profile)
+            args_require_value "$@" || return 1
+            _cli[db_profile]="$2"
+            shift 2
+            ;;
+          --password)
+            args_require_value "$@" || return 1
+            _cli[password]="$2"
+            shift 2
+            ;;
+          --password-file)
+            args_require_value "$@" || return 1
+            _cli[password_file]="$2"
+            shift 2
+            ;;
+          --key-file)
+            args_require_value "$@" || return 1
+            _cli[key_file]="$2"
+            shift 2
+            ;;
+          *)
+            return 1
+            ;;
+        esac
+      done
+      if [[ "${_cli[subcmd]}" == "encode" ]]; then
+        [[ -n "${_cli[db_config]}" && -n "${_cli[db_profile]}" && -n "${_cli[password]}" && -n "${_cli[key_file]}" ]] || return 1
+      else
+        [[ -n "${_cli[password_file]}" && -n "${_cli[key_file]}" ]] || return 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 usage() {
   cat <<'EOF'
@@ -73,19 +186,23 @@ file_byte_size() {
 }
 
 load_all_properties() {
-  local props_name="$1"
+  local cli_name="$1"
+  local props_name="$2"
+  local -n _cli="$cli_name"
   local -n _props="$props_name"
 
-  [[ -n "${CLI_ENV_CONFIG:-}" ]] && load_props_from_file "$CLI_ENV_CONFIG" "$props_name"
-  load_props_from_file "$CLI_DB_CONFIG" "$props_name"
-  load_props_from_file "$CLI_JOBS_CONFIG" "$props_name"
+  [[ -n "${_cli[env_config]:-}" ]] && load_props_from_file "${_cli[env_config]}" "$props_name"
+  load_props_from_file "${_cli[db_config]}" "$props_name"
+  load_props_from_file "${_cli[jobs_config]}" "$props_name"
 }
 
 process_job() {
-  local props_name="$1"
-  local runtime_name="$2"
-  local job_name="$3"
-  local summary_name="$4"
+  local cli_name="$1"
+  local props_name="$2"
+  local runtime_name="$3"
+  local job_name="$4"
+  local summary_name="$5"
+  local -n _cli="$cli_name"
   local -n _summary="$summary_name"
   local -A profile=()
   local -A job=()
@@ -101,13 +218,13 @@ process_job() {
 
   plan[sql]="$(render_select_sql plan)"
 
-  if [[ "$CLI_CMD" == "validate" ]]; then
+  if [[ "${_cli[cmd]}" == "validate" ]]; then
     print_validate_ok
     summary_mark_ok "$summary_name" "$job_name"
     return 0
   fi
 
-  if [[ "$CLI_CMD" == "plan" ]]; then
+  if [[ "${_cli[cmd]}" == "plan" ]]; then
     print_plan plan
     summary_mark_ok "$summary_name" "$job_name"
     return 0
@@ -137,15 +254,19 @@ process_job() {
 }
 
 run_export_command() {
+  local cli_name="$1"
+  local selectors_name="$2"
+  local -n _cli="$cli_name"
+  local -n _selectors="$selectors_name"
   local -A props=()
   local -A runtime=()
   local -A summary=()
   local -a selected_jobs=()
   local job_name
 
-  init_runtime_context "${CLI_DATE:-}" runtime
-  load_all_properties props
-  resolve_job_selectors props CLI_SELECTORS selected_jobs
+  init_runtime_context "${_cli[date]:-}" runtime
+  load_all_properties "$cli_name" props
+  resolve_job_selectors props "$selectors_name" selected_jobs
   summary_init summary
 
   if [[ "${#selected_jobs[@]}" -eq 0 ]]; then
@@ -157,7 +278,7 @@ run_export_command() {
   print_runtime_context runtime
 
   for job_name in "${selected_jobs[@]}"; do
-    process_job props runtime "$job_name" summary
+    process_job "$cli_name" props runtime "$job_name" summary
   done
 
   summary_print summary
@@ -165,35 +286,40 @@ run_export_command() {
 }
 
 run_password_command() {
-  case "$CLI_SUBCMD" in
+  local cli_name="$1"
+  local -n _cli="$cli_name"
+  case "${_cli[subcmd]}" in
   encode)
     local -A props=()
     local -A profile=()
-    load_props_from_file "$CLI_DB_CONFIG" props
-    load_export_profile props "$CLI_DB_PROFILE" profile || return 0
-    profile[password_key_file]="$CLI_KEY_FILE"
-    write_encrypted_password "$CLI_PASSWORD" "$(profile_password_file props "$CLI_DB_PROFILE" profile)" profile
+    load_props_from_file "${_cli[db_config]}" props
+    load_export_profile props "${_cli[db_profile]}" profile || return 0
+    profile[password_key_file]="${_cli[key_file]}"
+    write_encrypted_password "${_cli[password]}" "$(profile_password_file props "${_cli[db_profile]}" profile)" profile
     ;;
   decode)
     local -A profile=()
-    profile[password_key_file]="$CLI_KEY_FILE"
-    decrypt_password_file "$CLI_PASSWORD_FILE" profile
+    profile[password_key_file]="${_cli[key_file]}"
+    decrypt_password_file "${_cli[password_file]}" profile
     ;;
   esac
 }
 
 main() {
-  if ! parse_exportctl_args "$@"; then
+  local -A cli=()
+  local -a selectors=()
+
+  if ! parse_exportctl_args cli selectors "$@"; then
     usage >&2
     exit 1
   fi
 
-  case "$CLI_CMD" in
+  case "${cli[cmd]}" in
   validate | plan | run)
-    run_export_command
+    run_export_command cli selectors
     ;;
   password)
-    run_password_command
+    run_password_command cli
     ;;
   *)
     usage >&2

@@ -5,8 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$(cd "$ROOT_DIR/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 
+cd "$PROJECT_DIR"
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+
+rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 mkdir -p "$TMP_DIR/pwd" "$TMP_DIR/bin"
 printf 'key' >"$TMP_DIR/key"

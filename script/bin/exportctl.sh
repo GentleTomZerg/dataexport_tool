@@ -4,12 +4,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/common/strict.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
-source "$ROOT_DIR/lib/export/profile.sh"
-source "$ROOT_DIR/lib/export/job.sh"
-source "$ROOT_DIR/lib/export/plan.sh"
-source "$ROOT_DIR/lib/sql/render.sh"
-source "$ROOT_DIR/lib/exec/db.sh"
-source "$ROOT_DIR/lib/artifact/pipeline.sh"
+source "$ROOT_DIR/lib/exportctl/model/profile.sh"
+source "$ROOT_DIR/lib/exportctl/model/job.sh"
+source "$ROOT_DIR/lib/exportctl/model/plan.sh"
+source "$ROOT_DIR/lib/exportctl/sql.sh"
+source "$ROOT_DIR/lib/exportctl/run/db.sh"
+source "$ROOT_DIR/lib/exportctl/run/artifact.sh"
 
 setup_shell
 
@@ -40,7 +40,7 @@ EOF
 run_export_command() {
   local cli_name="$1"
   local requested_jobs_name="$2"
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
   local -A props=()
   local -A runtime=()
   local -a resolved_jobs=()
@@ -50,7 +50,7 @@ run_export_command() {
   local failed_count=0
   local job_name
 
-  init_runtime_context "${cli_ctx[date]:-}" runtime
+  init_runtime_context "${cli_ref[date]:-}" runtime
   load_all_properties "$cli_name" props
   resolve_requested_jobs props "$requested_jobs_name" resolved_jobs
 
@@ -166,7 +166,7 @@ process_job() {
   local cli_name="$1"
   local props_name="$2"
   local job_name="$3"
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
   local -A profile=()
   local -A job=()
   local -A plan=()
@@ -180,7 +180,7 @@ process_job() {
 
   plan[sql]="$(render_select_sql plan)"
 
-  case "${cli_ctx[cmd]}" in
+  case "${cli_ref[cmd]}" in
   validate)
     printf '[%s] Validation succeeded.\n' "$job_name"
     ;;
@@ -220,53 +220,53 @@ print_summary() {
 
 init_runtime_context() {
   local run_date="$1"
-  local out_name="$2"
-  local -n runtime_ctx="$out_name"
+  local runtime_name="$2"
+  local -n runtime_ref="$runtime_name"
   local epoch month_start next_month_epoch next_month_first
 
   if [[ -z "$run_date" ]]; then
     run_date="$(date +%F)"
   fi
 
-  runtime_ctx[export_date]="$run_date"
-  runtime_ctx[today]="$run_date"
+  runtime_ref[export_date]="$run_date"
+  runtime_ref[today]="$run_date"
 
   if [[ "$(uname)" == "Darwin" ]]; then
     epoch="$(date -j -f "%Y-%m-%d" "$run_date" "+%s")"
-    runtime_ctx[yesterday]="$(date -r $((epoch - 86400)) "+%F")"
-    runtime_ctx[export_month]="$(date -r "$epoch" "+%Y-%m")"
+    runtime_ref[yesterday]="$(date -r $((epoch - 86400)) "+%F")"
+    runtime_ref[export_month]="$(date -r "$epoch" "+%Y-%m")"
     month_start="$(date -r "$epoch" "+%Y-%m-01")"
-    runtime_ctx[month_start]="$month_start"
+    runtime_ref[month_start]="$month_start"
     next_month_epoch="$(date -j -f "%Y-%m-%d" "$month_start" "+%s")"
     next_month_epoch=$((next_month_epoch + 32 * 86400))
     next_month_first="$(date -r "$next_month_epoch" "+%Y-%m-01")"
-    runtime_ctx[month_end]="$(date -r $(($(date -j -f "%Y-%m-%d" "$next_month_first" "+%s") - 86400)) "+%F")"
+    runtime_ref[month_end]="$(date -r $(($(date -j -f "%Y-%m-%d" "$next_month_first" "+%s") - 86400)) "+%F")"
   else
-    runtime_ctx[yesterday]="$(date -d "$run_date -1 day" +%F)"
-    runtime_ctx[export_month]="$(date -d "$run_date" +%Y-%m)"
-    runtime_ctx[month_start]="$(date -d "$run_date" +%Y-%m-01)"
-    runtime_ctx[month_end]="$(date -d "${runtime_ctx[month_start]} +1 month -1 day" +%F)"
+    runtime_ref[yesterday]="$(date -d "$run_date -1 day" +%F)"
+    runtime_ref[export_month]="$(date -d "$run_date" +%Y-%m)"
+    runtime_ref[month_start]="$(date -d "$run_date" +%Y-%m-01)"
+    runtime_ref[month_end]="$(date -d "${runtime_ref[month_start]} +1 month -1 day" +%F)"
   fi
 
-  export EXPORT_DATE="${runtime_ctx[export_date]}"
-  export TODAY="${runtime_ctx[today]}"
-  export YESTERDAY="${runtime_ctx[yesterday]}"
-  export EXPORT_MONTH="${runtime_ctx[export_month]}"
-  export MONTH_START="${runtime_ctx[month_start]}"
-  export MONTH_END="${runtime_ctx[month_end]}"
+  export EXPORT_DATE="${runtime_ref[export_date]}"
+  export TODAY="${runtime_ref[today]}"
+  export YESTERDAY="${runtime_ref[yesterday]}"
+  export EXPORT_MONTH="${runtime_ref[export_month]}"
+  export MONTH_START="${runtime_ref[month_start]}"
+  export MONTH_END="${runtime_ref[month_end]}"
 }
 
 print_runtime_context() {
   local runtime_name="$1"
-  local -n runtime_ctx="$runtime_name"
+  local -n runtime_ref="$runtime_name"
 
   printf '== Runtime ==\n'
-  printf 'EXPORT_DATE=%s\n' "${runtime_ctx[export_date]}"
-  printf 'TODAY=%s\n' "${runtime_ctx[today]}"
-  printf 'YESTERDAY=%s\n' "${runtime_ctx[yesterday]}"
-  printf 'EXPORT_MONTH=%s\n' "${runtime_ctx[export_month]}"
-  printf 'MONTH_START=%s\n' "${runtime_ctx[month_start]}"
-  printf 'MONTH_END=%s\n\n' "${runtime_ctx[month_end]}"
+  printf 'EXPORT_DATE=%s\n' "${runtime_ref[export_date]}"
+  printf 'TODAY=%s\n' "${runtime_ref[today]}"
+  printf 'YESTERDAY=%s\n' "${runtime_ref[yesterday]}"
+  printf 'EXPORT_MONTH=%s\n' "${runtime_ref[export_month]}"
+  printf 'MONTH_START=%s\n' "${runtime_ref[month_start]}"
+  printf 'MONTH_END=%s\n\n' "${runtime_ref[month_end]}"
 }
 
 export_env_properties() {
@@ -302,14 +302,14 @@ print_env_properties() {
 load_all_properties() {
   local cli_name="$1"
   local props_name="$2"
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
 
-  if [[ -n "${cli_ctx[env_config]:-}" ]]; then
-    load_props_from_file "${cli_ctx[env_config]}" "$props_name"
+  if [[ -n "${cli_ref[env_config]:-}" ]]; then
+    load_props_from_file "${cli_ref[env_config]}" "$props_name"
     export_env_properties "$props_name"
   fi
-  load_props_from_file "${cli_ctx[db_config]}" "$props_name"
-  load_props_from_file "${cli_ctx[jobs_config]}" "$props_name"
+  load_props_from_file "${cli_ref[db_config]}" "$props_name"
+  load_props_from_file "${cli_ref[jobs_config]}" "$props_name"
 }
 
 resolve_requested_jobs() {
@@ -365,14 +365,14 @@ args_validate_date() {
 init_cli_context() {
   local cli_name="$1"
   local requested_jobs_name="$2"
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
   local -n requested_jobs_ref="$requested_jobs_name"
 
-  cli_ctx[cmd]=""
-  cli_ctx[db_config]=""
-  cli_ctx[jobs_config]=""
-  cli_ctx[env_config]=""
-  cli_ctx[date]=""
+  cli_ref[cmd]=""
+  cli_ref[db_config]=""
+  cli_ref[jobs_config]=""
+  cli_ref[env_config]=""
+  cli_ref[date]=""
   requested_jobs_ref=()
 }
 
@@ -380,29 +380,29 @@ parse_export_args() {
   local cli_name="$1"
   local requested_jobs_name="$2"
   shift 2
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
   local -n requested_jobs_ref="$requested_jobs_name"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --db-config)
       args_require_value "$@" || return 1
-      cli_ctx[db_config]="$2"
+      cli_ref[db_config]="$2"
       shift 2
       ;;
     --jobs-config)
       args_require_value "$@" || return 1
-      cli_ctx[jobs_config]="$2"
+      cli_ref[jobs_config]="$2"
       shift 2
       ;;
     --env-config)
       args_require_value "$@" || return 1
-      cli_ctx[env_config]="$2"
+      cli_ref[env_config]="$2"
       shift 2
       ;;
     --date)
       args_require_value "$@" || return 1
-      cli_ctx[date]="$2"
+      cli_ref[date]="$2"
       shift 2
       ;;
     -h | --help)
@@ -415,23 +415,23 @@ parse_export_args() {
     esac
   done
 
-  [[ -n "${cli_ctx[db_config]}" && -n "${cli_ctx[jobs_config]}" ]] || return 1
-  args_validate_date "${cli_ctx[date]}" || return 1
+  [[ -n "${cli_ref[db_config]}" && -n "${cli_ref[jobs_config]}" ]] || return 1
+  args_validate_date "${cli_ref[date]}" || return 1
 }
 
 parse_exportctl_args() {
   local cli_name="$1"
   local requested_jobs_name="$2"
   shift 2
-  local -n cli_ctx="$cli_name"
+  local -n cli_ref="$cli_name"
 
   init_cli_context "$cli_name" "$requested_jobs_name"
 
-  cli_ctx[cmd]="${1:-}"
-  [[ -n "${cli_ctx[cmd]}" ]] || return 1
+  cli_ref[cmd]="${1:-}"
+  [[ -n "${cli_ref[cmd]}" ]] || return 1
   shift
 
-  case "${cli_ctx[cmd]}" in
+  case "${cli_ref[cmd]}" in
   validate | plan | run)
     parse_export_args "$cli_name" "$requested_jobs_name" "$@"
     ;;

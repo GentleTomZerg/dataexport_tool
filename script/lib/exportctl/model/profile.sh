@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config/properties.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/config/properties.sh"
 
 profile_password_file() {
   local props_name="$1"

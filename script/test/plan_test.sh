@@ -5,8 +5,8 @@ shopt -s extglob
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
-source "$ROOT_DIR/lib/export/plan.sh"
-source "$ROOT_DIR/lib/sql/render.sh"
+source "$ROOT_DIR/lib/exportctl/model/plan.sh"
+source "$ROOT_DIR/lib/exportctl/sql.sh"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

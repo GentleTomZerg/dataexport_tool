@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/security/credentials.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/credentials.sh"
 
 _apply_separators() {
   local field_sep_raw="$1"

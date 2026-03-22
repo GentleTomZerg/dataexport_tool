@@ -31,12 +31,12 @@ Things now owned by `exportctl`:
 Things still kept in libraries:
 
 - properties parsing and expansion: `script/lib/config/properties.sh`
-- job loading: `script/lib/export/job.sh`
-- DB profile loading: `script/lib/export/profile.sh`
-- normalized plan building: `script/lib/export/plan.sh`
-- SQL rendering: `script/lib/sql/render.sh`
-- DB execution: `script/lib/exec/db.sh`
-- artifact handling: `script/lib/artifact/pipeline.sh`
+- job loading: `script/lib/exportctl/model/job.sh`
+- DB profile loading: `script/lib/exportctl/model/profile.sh`
+- normalized plan building: `script/lib/exportctl/model/plan.sh`
+- SQL rendering: `script/lib/exportctl/sql.sh`
+- DB execution: `script/lib/exportctl/run/db.sh`
+- artifact handling: `script/lib/exportctl/run/artifact.sh`
 
 ## Important Simplifications Already Made
 

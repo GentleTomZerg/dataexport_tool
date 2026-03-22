@@ -1,128 +1,165 @@
-# Refactor Context
+# Agent Coding Guidelines
 
-## Current State
+This is a Bash project for data export using `.properties` configuration files.
 
-The project has been rewritten around `script/bin/exportctl.sh`.
+## Build/Test Commands
 
-Current behavior:
-
-- `validate`: parse config, resolve runtime/env values, build each job plan, print `STATUS=OK` or `STATUS=FAILED`
-- `plan`: print runtime, `ENV_*`, per-job plan details, and SQL
-- `run`: print plan details, execute export, run artifact pipeline, and log stage-level progress
-
-Current exit behavior:
-
-- exit `1` only for invalid CLI arguments
-- runtime failures log errors but still return `0`
-
-## Ownership Decisions
-
-The recent refactor intentionally moved orchestration concerns into `script/bin/exportctl.sh`.
-
-Things now owned by `exportctl`:
-
-- CLI argument parsing
-- runtime date calculation
-- `ENV_*` export and printing
-- selector resolution
-- batch summary bookkeeping and printing
-- mode dispatch for validate / plan / run
-
-Things still kept in libraries:
-
-- properties parsing and expansion: `script/lib/config/properties.sh`
-- job loading: `script/lib/exportctl/model/job.sh`
-- DB profile loading: `script/lib/exportctl/model/profile.sh`
-- normalized plan building: `script/lib/exportctl/model/plan.sh`
-- SQL rendering: `script/lib/exportctl/sql.sh`
-- DB execution: `script/lib/exportctl/run/db.sh`
-- artifact handling: `script/lib/exportctl/run/artifact.sh`
-
-## Important Simplifications Already Made
-
-- removed the old multi-script structure and rebuilt the tool around `exportctl`
-- removed `password encode|decode` from `exportctl`
-- removed group-based job selectors
-- removed the separate selector module
-- removed the separate summary module
-- removed the separate args module
-- removed the separate runtime module
-- removed the `EXT` rename placeholder
-- restored MySQL split-column support via `job.<name>.SPLIT.<column>=<chunk_size>,<chunks>`
-- separated `validate` and `plan` output behavior
-
-## Current Logging Model
-
-Per-job logs:
-
-- `JOB_INFO`
-- `JOB_OK`
-- `JOB_FAIL`
-
-Current detailed runtime logs in `run` mode include:
-
-- export start
-- export success with file, line count, byte size
-- compress start / success
-- transfer start / success
-- final artifact path and size
-
-Final batch output:
-
-- `SUMMARY total=... ok=... failed=...`
-- `FAILED_JOBS=...` when applicable
-
-## Known Constraints
-
-- `WHERE` is raw SQL passthrough
-- only `mysql` and `postgres` are supported
-- split-column rendering currently only applies to MySQL
-- property expansion only sees explicitly defined properties and exported variables
-- if a rename template references something like `${job.finance.COMPRESS.MODE}`, that property must actually be defined in config
-- `exportctl` is intentionally limited to `validate`, `plan`, and `run`
-
-## Recent Structural Cleanup
-
-`script/bin/exportctl.sh` has been improved by:
-
-- introducing an explicit CLI context map instead of file-level `CLI_*` globals
-- removing the fake runtime parameter from `build_export_plan`
-- splitting the old large `process_job` flow into:
-  - `build_job_plan`
-  - `handle_validate_mode`
-  - `handle_plan_mode`
-  - `handle_run_mode`
-
-## What Still Needs Improvement
-
-High priority:
-
-- keep reducing the size and cognitive load of `script/bin/exportctl.sh`
-- tighten naming and section ordering in `script/bin/exportctl.sh`
-- review ShellCheck warnings, especially around `local -A`, namerefs, and orchestration helpers
-
-Medium priority:
-
-- decide whether some helper functions inside `exportctl` should become very small local utility libraries again, but only if they are truly generic and reused
-- improve the transfer rename model if richer current-job placeholders are needed
-- make demo/sample config internally consistent where rename patterns reference compression settings
-
-Low priority:
-
-- expand the user manual further if operator guidance needs troubleshooting / FAQ sections
-- consider whether final summary output should stay plain stdout or move to the same structured logging style
-
-## Recommended Next Steps
-
-1. Clean up `script/bin/exportctl.sh` naming and section ordering.
-2. Run a focused ShellCheck pass and fix only real issues.
-3. Decide whether to keep summary helpers exactly as-is or simplify them further.
-4. Review sample configs under `script/etc/demo` and `script/etc/local`.
-
-## Verification Command
-
-Use this as the baseline regression check:
-
+### Run All Tests
 ```bash
 bash script/test/run_all.sh
+```
+
+### Run Single Test
+```bash
+bash script/test/properties_test.sh
+bash script/test/selector_test.sh
+bash script/test/plan_test.sh
+bash script/test/exportctl_test.sh
+```
+
+### Package for Deployment
+```bash
+./make.sh
+```
+
+## Code Style Guidelines
+
+### Shell Script Conventions
+
+- **Shebang**: Use `#!/usr/bin/env bash` for all scripts
+- **Shell Options**: Use `set -uo pipefail` and `shopt -s extglob` (see `lib/common/strict.sh`)
+- **Path Resolution**: Use `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)` for script-relative paths
+- **Local Variables**: Always use `local` for function variables
+- **References**: Use `local -n` for passing associative arrays by reference
+
+### Function Naming
+
+- Use snake_case: `load_export_profile`, `props_get`, `expand_value`
+- Private helpers prefixed with `_` (if needed): Not used in this codebase
+- Verbs for actions: `load_`, `get_`, `parse_`, `build_`, `render_`, `execute_`
+
+### Variable Naming
+
+- Associative arrays for maps: `local -A props=()` or `local -A plan=()`
+- Use descriptive names: `db_profile`, `export_file`, `field_separator`
+- Constants in UPPER_SNAKE: `EXPORT_DATE`, `YESTERDAY`
+- Prefix config-related with source: `job.*`, `profile.*`, `ENV_*`
+
+### Imports/Sourcing
+
+```bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/config/properties.sh"
+```
+
+Use `source` for library loading. Use relative paths from script location.
+
+### Error Handling
+
+- Print errors to stderr: `printf 'ERROR: ...' >&2`
+- Return `1` for failures, `0` for success
+- Use `|| return 1` to propagate errors
+- Log warnings but continue batch processing (return 0 even on runtime errors)
+
+### Formatting
+
+- Indent with 2 spaces (not tabs)
+- Put function opening brace on same line: `func() {`
+- Use `then`/`do` on same line with `if`/`for` when compact
+- Separate functions with blank lines
+- Maximum line length: ~120 chars
+
+### Arrays and Maps
+
+```bash
+# Associative array
+local -A props=()
+props[key]="value"
+
+# Nameref for passing
+local -n _props="$props_name"
+
+# Iterate over keys
+for key in "${!_map[@]}"; do
+```
+
+### String Handling
+
+- Use `[[ ]]` for conditionals (not `[ ]`)
+- Use `printf '%s'` instead of `echo` for safety
+- Use `${var:-default}` for defaults
+- Use `${var//pattern/replacement}` for substitution
+
+### Properties File Format
+
+- Key-value separated by `=`
+- Support `#` and `;` for comments
+- Trim whitespace on both sides
+- Tab-separated internally for parsing
+
+### Exit Codes
+
+- `1`: CLI argument errors only
+- `0`: All runtime outcomes (failures logged, not exit codes)
+
+## Project Structure
+
+```
+script/
+├── bin/                    # Executable scripts
+│   ├── exportctl.sh       # Main entry point
+│   └── run_export.sh      # Simplified wrapper
+├── lib/
+│   ├── common/            # Shared utilities
+│   │   └── strict.sh     # Shell setup
+│   ├── config/            # Configuration handling
+│   │   └── properties.sh # Properties parser
+│   └── exportctl/
+│       ├── model/         # Data models
+│       │   ├── job.sh
+│       │   ├── plan.sh
+│       │   └── profile.sh
+│       ├── run/           # Execution logic
+│       │   ├── artifact.sh
+│       │   ├── credentials.sh
+│       │   ├── crypto.sh
+│       │   └── db.sh
+│       └── sql.sh         # SQL rendering
+├── etc/
+│   ├── demo/             # Demo configurations
+│   ├── local/            # Local configurations
+│   └── env.properties    # Environment variables
+└── test/
+    ├── run_all.sh        # Test runner
+    ├── test_helpers.sh   # Test utilities
+    └── *_test.sh         # Individual tests
+```
+
+## Common Patterns
+
+### Passing Output Maps
+
+```bash
+local -A plan=()
+build_export_plan "$props_name" "$job_name" profile job plan
+```
+
+### Checking Required Fields
+
+```bash
+if [[ -z "${_out[field]:-}" ]]; then
+  printf 'ERROR: missing required field\n' >&2
+  return 1
+fi
+```
+
+### Default Values
+
+```bash
+[[ -n "${_out[separator]:-}" ]] || _out[separator]='\t'
+```
+
+### Error Propagation
+
+```bash
+load_props_from_file "$file" "props" || return 1
 ```

@@ -20,9 +20,9 @@ setup_shell
 usage() {
   cat <<'EOF'
 Usage:
-  exportctl.sh validate --db-config FILE --jobs-config FILE [--env-config FILE] [job selectors...]
-  exportctl.sh plan --db-config FILE --jobs-config FILE [--env-config FILE] [--date YYYY-MM-DD] [job selectors...]
-  exportctl.sh run --db-config FILE --jobs-config FILE [--env-config FILE] [--date YYYY-MM-DD] [job selectors...]
+  exportctl.sh validate --jobs-config FILE --env-config FILE [job selectors...]
+  exportctl.sh plan --jobs-config FILE --env-config FILE [--date YYYY-MM-DD] [job selectors...]
+  exportctl.sh run --jobs-config FILE --env-config FILE [--date YYYY-MM-DD] [job selectors...]
 
 Selectors:
   users orders
@@ -313,7 +313,6 @@ load_all_properties() {
     load_props_from_file "${cli_ref[env_config]}" "$props_name"
     export_env_properties "$props_name"
   fi
-  load_props_from_file "${cli_ref[db_config]}" "$props_name"
   load_props_from_file "${cli_ref[jobs_config]}" "$props_name"
 }
 
@@ -374,7 +373,6 @@ init_cli_context() {
   local -n requested_jobs_ref="$requested_jobs_name"
 
   cli_ref[cmd]=""
-  cli_ref[db_config]=""
   cli_ref[jobs_config]=""
   cli_ref[env_config]=""
   cli_ref[date]=""
@@ -390,11 +388,6 @@ parse_export_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --db-config)
-      args_require_value "$@" || return 1
-      cli_ref[db_config]="$2"
-      shift 2
-      ;;
     --jobs-config)
       args_require_value "$@" || return 1
       cli_ref[jobs_config]="$2"
@@ -420,7 +413,7 @@ parse_export_args() {
     esac
   done
 
-  [[ -n "${cli_ref[db_config]}" && -n "${cli_ref[jobs_config]}" ]] || return 1
+  [[ -n "${cli_ref[jobs_config]}" && -n "${cli_ref[env_config]}" ]] || return 1
   args_validate_date "${cli_ref[date]}" || return 1
 }
 

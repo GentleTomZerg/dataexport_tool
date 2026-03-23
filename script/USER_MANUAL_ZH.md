@@ -40,8 +40,7 @@ USE_FAKE_BIN=true  # 使用假的 mysql 输出
 ```bash
 bash script/bin/exportctl.sh validate \
   --jobs-config FILE \
-  [--env-config FILE] \
-  [--date YYYY-MM-DD] \
+  --env-config FILE \
   [job selectors...]
 ```
 
@@ -52,7 +51,7 @@ bash script/bin/exportctl.sh validate \
 ```bash
 bash script/bin/exportctl.sh plan \
   --jobs-config FILE \
-  [--env-config FILE] \
+  --env-config FILE \
   [--date YYYY-MM-DD] \
   [job selectors...]
 ```
@@ -64,14 +63,14 @@ bash script/bin/exportctl.sh plan \
 ```bash
 bash script/bin/exportctl.sh run \
   --jobs-config FILE \
-  [--env-config FILE] \
+  --env-config FILE \
   [--date YYYY-MM-DD] \
   [job selectors...]
 ```
 
 ## 4. 参数说明
 
-### 4.1 `--jobs-config FILE`
+### 4.1 `--jobs-config FILE`（必填）
 
 Job 配置文件：
 
@@ -83,9 +82,9 @@ job.<name>.EXPORT_FILE=...
 job.<name>.WHERE=...
 ```
 
-### 4.2 `--env-config FILE`
+### 4.2 `--env-config FILE`（必填）
 
-环境变量配置，包含 DB profile 和变量展开：
+环境变量配置文件，包含 DB profile 和变量展开：
 
 ```properties
 # DB Profile 配置 (ENV_* 前缀)
@@ -102,7 +101,7 @@ ENV_WORK_PATH=/path/to/work
 ENV_EXPORT_ROOT=./exports
 ```
 
-### 4.3 `--date YYYY-MM-DD`
+### 4.3 `--date YYYY-MM-DD`（可选）
 
 指定业务日期，会生成以下变量：
 
@@ -116,39 +115,12 @@ ENV_EXPORT_ROOT=./exports
 | `MONTH_END` | `YYYY-MM-DD` | 月末 |
 | `BJS_DATE` | `YYYYMMDD` | 无分隔符日期 |
 
-### 4.4 `job selectors...`
+### 4.4 `job selectors...`（可选）
 
-可选，指定只运行哪些 job：
-
-```bash
-bash script/bin/exportctl.sh validate \
-  --jobs-config FILE \
-  --env-config FILE \
-  [job selectors...]
-```
-
-### 3.2 plan
-
-显示解析后的执行计划，包含 SQL：
+指定只运行哪些 job：
 
 ```bash
-bash script/bin/exportctl.sh plan \
-  --jobs-config FILE \
-  --env-config FILE \
-  [--date YYYY-MM-DD] \
-  [job selectors...]
-```
-
-### 3.3 run
-
-执行导出：
-
-```bash
-bash script/bin/exportctl.sh run \
-  --jobs-config FILE \
-  --env-config FILE \
-  [--date YYYY-MM-DD] \
-  [job selectors...]
+bash script/bin/exportctl.sh run ... users orders
 ```
 
 ## 5. 配置示例
@@ -180,13 +152,6 @@ job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email
 job.users.EXPORT_FILE=${ENV_GTP_TEMP_PATH}/users_${EXPORT_DATE}.csv
 job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
-```
-
-### 5.3 db.properties（占位符）
-
-```properties
-# DB profiles moved to env.properties
-# Use ENV_* prefixed profile names in job configs
 ```
 
 ## 6. 配置字段参考
@@ -295,8 +260,6 @@ Summary: total=1 ok=1 failed=0
 - 返回 `0`：其他所有情况（即使 job 失败）
 
 ## 9. 配置文件位置
-
-> **注意**：DB profile 配置已移至 `env.properties`，无需 db.properties
 
 | 配置文件 | 路径 | 说明 |
 |---------|------|------|

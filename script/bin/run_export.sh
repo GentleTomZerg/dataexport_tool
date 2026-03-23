@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-USE_FAKE_BIN=true
+USE_FAKE_BIN=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

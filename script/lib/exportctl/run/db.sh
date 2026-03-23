@@ -22,9 +22,11 @@ execute_plan_export() {
   local -n _plan="$plan_name"
   local -n _profile="$profile_name"
   local password
+  local error_file
 
   mkdir -p "$(dirname "${_plan[export_file]}")" || return 1
   password="$(read_profile_password "$profile_name")" || return 1
+  error_file="$(mktemp)"
 
   case "${_plan[db_type]}" in
   mysql)
@@ -33,7 +35,7 @@ execute_plan_export() {
       -P "${_profile[port]}" \
       -u "${_profile[user]}" \
       "${_profile[name]}" \
-      -e "${_plan[sql]}" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
+      -e "${_plan[sql]}" 2>"$error_file" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   postgres)
     PGPASSWORD="$password" psql \
@@ -41,12 +43,22 @@ execute_plan_export() {
       -p "${_profile[port]}" \
       -U "${_profile[user]}" \
       -d "${_profile[name]}" \
-      -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" |
+      -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" 2>"$error_file" |
       _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   *)
+    rm -f "$error_file"
     printf 'ERROR: unsupported DB type: %s\n' "${_plan[db_type]}" >&2
     return 1
     ;;
   esac
+
+  local db_exit_code=${PIPESTATUS[0]}
+  if [[ "$db_exit_code" -ne 0 ]]; then
+    printf 'ERROR: %s failed for %s: %s\n' "${_plan[db_type]}" "${_profile[name]}" "$(cat "$error_file")" >&2
+    rm -f "$error_file"
+    return 1
+  fi
+
+  rm -f "$error_file"
 }

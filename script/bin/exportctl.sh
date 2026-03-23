@@ -230,6 +230,7 @@ init_runtime_context() {
 
   runtime_ref[export_date]="$run_date"
   runtime_ref[today]="$run_date"
+  runtime_ref[bjs_date]="${run_date//-/}"
 
   if [[ "$(uname)" == "Darwin" ]]; then
     epoch="$(date -j -f "%Y-%m-%d" "$run_date" "+%s")"
@@ -254,6 +255,7 @@ init_runtime_context() {
   export EXPORT_MONTH="${runtime_ref[export_month]}"
   export MONTH_START="${runtime_ref[month_start]}"
   export MONTH_END="${runtime_ref[month_end]}"
+  export BJS_DATE="${runtime_ref[bjs_date]}"
 }
 
 print_runtime_context() {
@@ -266,7 +268,8 @@ print_runtime_context() {
   printf 'YESTERDAY=%s\n' "${runtime_ref[yesterday]}"
   printf 'EXPORT_MONTH=%s\n' "${runtime_ref[export_month]}"
   printf 'MONTH_START=%s\n' "${runtime_ref[month_start]}"
-  printf 'MONTH_END=%s\n\n' "${runtime_ref[month_end]}"
+  printf 'MONTH_END=%s\n' "${runtime_ref[month_end]}"
+  printf 'BJS_DATE=%s\n\n' "${runtime_ref[bjs_date]}"
 }
 
 export_env_properties() {

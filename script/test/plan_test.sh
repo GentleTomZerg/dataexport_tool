@@ -13,6 +13,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 mkdir -p "$TMP_DIR/pwd"
 printf 'key' >"$TMP_DIR/key"
+echo -n "testpassword" | openssl des3 -salt -in /dev/stdin -out "$TMP_DIR/pwd/localhost_3306_demo_user.pwd" -pass file:"$TMP_DIR/key" -pbkdf2 -iter 100000
 
 cat >"$TMP_DIR/all.properties" <<EOF
 primary.DB_HOST=localhost
@@ -21,6 +22,7 @@ primary.DB_NAME=demo
 primary.DB_USER=demo_user
 primary.DB_TYPE=mysql
 primary.DB_PASSWORD_DIR=$TMP_DIR/pwd
+primary.DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
 primary.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 job.users.DB_PROFILE=primary
 job.users.TABLE_NAME=users

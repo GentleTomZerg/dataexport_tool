@@ -21,51 +21,32 @@ execute_plan_export() {
   local profile_name="$2"
   local -n _plan="$plan_name"
   local -n _profile="$profile_name"
-  local password=""
+  local password
 
   mkdir -p "$(dirname "${_plan[export_file]}")" || return 1
   password="$(read_profile_password "$profile_name")" || return 1
 
   case "${_plan[db_type]}" in
-    mysql)
-      if [[ -n "$password" ]]; then
-        MYSQL_PWD="$password" mysql --batch --raw --skip-column-names \
-          -h "${_profile[host]}" \
-          -P "${_profile[port]}" \
-          -u "${_profile[user]}" \
-          "${_profile[name]}" \
-          -e "${_plan[sql]}" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
-      else
-        mysql --batch --raw --skip-column-names \
-          -h "${_profile[host]}" \
-          -P "${_profile[port]}" \
-          -u "${_profile[user]}" \
-          "${_profile[name]}" \
-          -e "${_plan[sql]}" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
-      fi
-      ;;
-    postgres)
-      if [[ -n "$password" ]]; then
-        PGPASSWORD="$password" psql \
-          -h "${_profile[host]}" \
-          -p "${_profile[port]}" \
-          -U "${_profile[user]}" \
-          -d "${_profile[name]}" \
-          -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-          _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
-      else
-        psql \
-          -h "${_profile[host]}" \
-          -p "${_profile[port]}" \
-          -U "${_profile[user]}" \
-          -d "${_profile[name]}" \
-          -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" | \
-          _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
-      fi
-      ;;
-    *)
-      printf 'ERROR: unsupported DB type: %s\n' "${_plan[db_type]}" >&2
-      return 1
-      ;;
+  mysql)
+    MYSQL_PWD="$password" mysql --batch --raw --skip-column-names \
+      -h "${_profile[host]}" \
+      -P "${_profile[port]}" \
+      -u "${_profile[user]}" \
+      "${_profile[name]}" \
+      -e "${_plan[sql]}" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
+    ;;
+  postgres)
+    PGPASSWORD="$password" psql \
+      -h "${_profile[host]}" \
+      -p "${_profile[port]}" \
+      -U "${_profile[user]}" \
+      -d "${_profile[name]}" \
+      -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" |
+      _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
+    ;;
+  *)
+    printf 'ERROR: unsupported DB type: %s\n' "${_plan[db_type]}" >&2
+    return 1
+    ;;
   esac
 }

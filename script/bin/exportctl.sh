@@ -114,6 +114,8 @@ print_plan() {
   printf 'EXPORT_FILE=%s\n' "${job_plan[export_file]}"
   printf 'FIELD_SEPARATOR=%s\n' "${job_plan[field_separator]}"
   printf 'LINE_TERMINATOR=%s\n' "${job_plan[line_terminator]}"
+  printf 'PASSWORD_FILE=%s\n' "${job_plan[password_file]:-}"
+  printf 'PASSWORD_KEY_FILE=%s\n' "${job_plan[password_key_file]:-}"
   printf 'SQL=%s\n' "${job_plan[sql]}"
   printf '\n'
 }

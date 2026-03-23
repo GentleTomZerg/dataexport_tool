@@ -16,15 +16,14 @@ printf 'key' >"$TMP_DIR/key"
 echo -n "testpassword" | openssl des3 -salt -in /dev/stdin -out "$TMP_DIR/pwd/localhost_3306_demo_user.pwd" -pass file:"$TMP_DIR/key" -pbkdf2 -iter 100000
 
 cat >"$TMP_DIR/all.properties" <<EOF
-primary.DB_HOST=localhost
-primary.DB_PORT=3306
-primary.DB_NAME=demo
-primary.DB_USER=demo_user
-primary.DB_TYPE=mysql
-primary.DB_PASSWORD_DIR=$TMP_DIR/pwd
-primary.DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
-primary.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
-job.users.DB_PROFILE=primary
+ENV_TEST_DB_HOST=localhost
+ENV_TEST_DB_PORT=3306
+ENV_TEST_DB_NAME=demo
+ENV_TEST_DB_USER=demo_user
+ENV_TEST_DB_TYPE=mysql
+ENV_TEST_DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
+ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
+job.users.DB_PROFILE=ENV_TEST_DB
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=./exports/users_\${EXPORT_DATE}.csv

@@ -34,13 +34,20 @@ primary.DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
 primary.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 EOF
 
-cat >"$TMP_DIR/env.properties" <<'EOF'
+cat >"$TMP_DIR/env.properties" <<EOF
 ENV_EXPORT_ROOT=./exports
 ENV_TRANSFER_ROOT=./exports_transfer
+ENV_TEST_DB_HOST=localhost
+ENV_TEST_DB_PORT=3306
+ENV_TEST_DB_NAME=demo
+ENV_TEST_DB_USER=demo_user
+ENV_TEST_DB_TYPE=mysql
+ENV_TEST_DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
+ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 EOF
 
 cat >"$TMP_DIR/jobs.properties" <<'EOF'
-job.users.DB_PROFILE=primary
+job.users.DB_PROFILE=ENV_TEST_DB
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=${ENV_EXPORT_ROOT}/users_${EXPORT_DATE}.csv

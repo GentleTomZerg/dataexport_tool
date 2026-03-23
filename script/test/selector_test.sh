@@ -18,29 +18,28 @@ printf '1\tAlice\n'
 EOF
 chmod +x "$TMP_DIR/bin/mysql"
 
-cat >"$TMP_DIR/db.properties" <<EOF
-primary.DB_HOST=localhost
-primary.DB_PORT=3306
-primary.DB_NAME=demo
-primary.DB_USER=demo_user
-primary.DB_TYPE=mysql
-primary.DB_PASSWORD_DIR=$TMP_DIR/pwd
-primary.DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
-primary.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
+cat >"$TMP_DIR/env.properties" <<EOF
+ENV_TEST_DB_HOST=localhost
+ENV_TEST_DB_PORT=3306
+ENV_TEST_DB_NAME=demo
+ENV_TEST_DB_USER=demo_user
+ENV_TEST_DB_TYPE=mysql
+ENV_TEST_DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
+ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 EOF
 
 cat >"$TMP_DIR/jobs.properties" <<'EOF'
-job.users.DB_PROFILE=primary
+job.users.DB_PROFILE=ENV_TEST_DB
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id
 job.users.EXPORT_FILE=./users.csv
-job.orders.DB_PROFILE=primary
+job.orders.DB_PROFILE=ENV_TEST_DB
 job.orders.TABLE_NAME=orders
 job.orders.COLUMNS=id
 job.orders.EXPORT_FILE=./orders.csv
 EOF
 
-output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" users orders 2>&1)"
+output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --db-config "$TMP_DIR/db.properties" --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" users orders 2>&1)"
 assert_contains "== Job: orders ==" "$output" "orders selected"
 assert_contains "== Job: users ==" "$output" "users selected"
 assert_true "[[ \"$output\" != *\"unknown job\"* ]]" "known jobs only"

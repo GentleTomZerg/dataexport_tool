@@ -12,7 +12,12 @@ _apply_separators() {
       gsub(/\\t/,"\t",OFS); gsub(/\\n/,"\n",OFS); gsub(/\\r/,"\r",OFS);
       gsub(/\\t/,"\t",ORS); gsub(/\\n/,"\n",ORS); gsub(/\\r/,"\r",ORS);
     }
-    { $1=$1; print }
+    {
+      for (i=1; i<=NF; i++) {
+        if ($i == "NULL") $i = "";
+      }
+      $1=$1; print
+    }
   '
 }
 

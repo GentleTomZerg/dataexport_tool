@@ -18,16 +18,34 @@ list_export_jobs() {
   done | sort
 }
 
-load_export_job() {
+validate_split_config() {
+  local job_name="$1"
+  local split_col="$2"
+  local chunk_size="$3"
+  local chunks="$4"
+  local -n _columns_seen="$5"
+
+  if [[ -z "$chunk_size" || -z "$chunks" ]]; then
+    printf 'ERROR: invalid split config for job %s column %s\n' "$job_name" "$split_col" >&2
+    return 1
+  fi
+  if [[ ! "$chunk_size" =~ ^[0-9]+$ || ! "$chunks" =~ ^[0-9]+$ || "$chunk_size" -le 0 || "$chunks" -le 0 ]]; then
+    printf 'ERROR: invalid split numbers for job %s column %s\n' "$job_name" "$split_col" >&2
+    return 1
+  fi
+  if [[ -z "${_columns_seen[$split_col]:-}" ]]; then
+    printf 'ERROR: split column %s is not present in COLUMNS for job %s\n' "$split_col" "$job_name" >&2
+    return 1
+  fi
+  return 0
+}
+
+extract_job_fields() {
   local props_name="$1"
   local job_name="$2"
   local out_name="$3"
-  local emit_errors="${4:-true}"
   local -n _out="$out_name"
   local prefix="job.${job_name}."
-  local split_key split_col split_value chunk_size chunks extra col
-  local -a raw_columns=()
-  declare -A columns_seen=()
 
   _out[name]="$job_name"
   _out[db_profile]="$(props_get "$props_name" "${prefix}DB_PROFILE")"
@@ -46,27 +64,50 @@ load_export_job() {
   _out[transfer_mode]="$(props_get "$props_name" "${prefix}TRANSFER.MODE")"
   _out[transfer_overwrite]="$(props_get "$props_name" "${prefix}TRANSFER.OVERWRITE")"
   _out[transfer_rename]="$(props_get "$props_name" "${prefix}TRANSFER.RENAME")"
+}
+
+apply_job_defaults() {
+  local out_name="$1"
+  local -n _out="$out_name"
 
   [[ -n "${_out[field_separator]}" ]] || _out[field_separator]='\t'
-  [[ -n "${_out[line_terminator]}" ]] || _out[line_terminator]='\n'
+  [[ -n "${_out[line_terminator]}" ]] || _out[line_terminator]=$'\n'
   [[ -n "${_out[compress_enabled]}" ]] || _out[compress_enabled]='false'
   [[ -n "${_out[compress_mode]}" ]] || _out[compress_mode]='tar.gz'
   [[ -n "${_out[compress_overwrite]}" ]] || _out[compress_overwrite]='false'
   [[ -n "${_out[compress_remove_original]}" ]] || _out[compress_remove_original]='false'
-  [[ -n "${_out[transfer_enabled]}" ]] || _out[transfer_enabled]='false'
-  [[ -n "${_out[transfer_mode]}" ]] || _out[transfer_mode]='move'
-  [[ -n "${_out[transfer_overwrite]}" ]] || _out[transfer_overwrite]='false'
+  _out[transfer_enabled]="${_out[transfer_enabled]:-false}"
+  _out[transfer_mode]="${_out[transfer_mode]:-move}"
+  _out[transfer_overwrite]="${_out[transfer_overwrite]:-false}"
   _out[splits]=""
+}
+
+validate_required_fields() {
+  local out_name="$1"
+  local job_name="$2"
+  local -n _out="$out_name"
 
   if [[ -z "${_out[db_profile]}" || -z "${_out[table]}" || -z "${_out[columns]}" ]]; then
-    if [[ "$emit_errors" == "true" ]]; then
-      printf 'ERROR: invalid job %s missing required fields\n' "$job_name" >&2
-    fi
+    printf 'ERROR: invalid job %s missing required fields\n' "$job_name" >&2
     return 1
   fi
+  return 0
+}
 
-  IFS=',' read -r -a raw_columns <<<"${_out[columns]}"
-  for col in "${raw_columns[@]}"; do
+parse_job_splits() {
+  local props_name="$1"
+  local job_name="$2"
+  local out_name="$3"
+  local columns_str="${4:-}"
+  local -n _out="$out_name"
+  local prefix="job.${job_name}."
+  local split_key split_col split_value chunk_size chunks extra
+  local -A columns_seen=()
+  local col
+
+  local -a cols=()
+  IFS=',' read -r -a cols <<<"$columns_str"
+  for col in "${cols[@]}"; do
     col="$(trim "$col")"
     [[ -n "$col" ]] && columns_seen["$col"]=1
   done
@@ -78,28 +119,27 @@ load_export_job() {
     chunk_size="$(trim "${chunk_size:-}")"
     chunks="$(trim "${chunks:-}")"
 
-    if [[ -z "$chunk_size" || -z "$chunks" || -n "${extra:-}" ]]; then
-      if [[ "$emit_errors" == "true" ]]; then
-        printf 'ERROR: invalid split config for job %s column %s\n' "$job_name" "$split_col" >&2
-      fi
-      return 1
-    fi
-    if [[ ! "$chunk_size" =~ ^[0-9]+$ || ! "$chunks" =~ ^[0-9]+$ || "$chunk_size" -le 0 || "$chunks" -le 0 ]]; then
-      if [[ "$emit_errors" == "true" ]]; then
-        printf 'ERROR: invalid split numbers for job %s column %s\n' "$job_name" "$split_col" >&2
-      fi
-      return 1
-    fi
-    if [[ -z "${columns_seen[$split_col]:-}" ]]; then
-      if [[ "$emit_errors" == "true" ]]; then
-        printf 'ERROR: split column %s is not present in COLUMNS for job %s\n' "$split_col" "$job_name" >&2
-      fi
+    if [[ -n "${extra:-}" ]]; then
+      printf 'ERROR: invalid split config for job %s column %s\n' "$job_name" "$split_col" >&2
       return 1
     fi
 
-    if [[ -n "${_out[splits]}" ]]; then
-      _out[splits]+=$'\n'
-    fi
+    validate_split_config "$job_name" "$split_col" "$chunk_size" "$chunks" columns_seen || return 1
+
+    [[ -n "${_out[splits]}" ]] && _out[splits]+=$'\n'
     _out[splits]+="${split_col}|${chunk_size}|${chunks}"
   done < <(props_keys "$props_name" "${prefix}SPLIT.")
+}
+
+load_export_job() {
+  local props_name="$1"
+  local job_name="$2"
+  local out_name="$3"
+  local -n _out="$out_name"
+
+  extract_job_fields "$props_name" "$job_name" "$out_name"
+  apply_job_defaults "$out_name"
+  validate_required_fields "$out_name" "$job_name" || return 1
+
+  parse_job_splits "$props_name" "$job_name" "$out_name" "${_out[columns]}" || return 1
 }

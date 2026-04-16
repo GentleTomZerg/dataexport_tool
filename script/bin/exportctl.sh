@@ -4,7 +4,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/lib/common/strict.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
-source "$ROOT_DIR/lib/exportctl/model/profile.sh"
 source "$ROOT_DIR/lib/exportctl/model/job.sh"
 source "$ROOT_DIR/lib/exportctl/model/plan.sh"
 source "$ROOT_DIR/lib/exportctl/sql.sh"
@@ -105,10 +104,11 @@ print_plan() {
   local plan_name="$1"
   local -n job_plan="$plan_name"
 
-  printf 'DB_PROFILE=%s\n' "${job_plan[db_profile]}"
   printf 'DB_TYPE=%s\n' "${job_plan[db_type]}"
   printf 'DB_HOST=%s\n' "${job_plan[db_host]}"
   printf 'DB_PORT=%s\n' "${job_plan[db_port]}"
+  printf 'DB_NAME=%s\n' "${job_plan[db_name]}"
+  printf 'DB_USER=%s\n' "${job_plan[db_user]}"
   printf 'TABLE=%s\n' "${job_plan[table]}"
   printf 'COLUMNS=%s\n' "${job_plan[columns]}"
   printf 'EXPORT_FILE=%s\n' "${job_plan[export_file]}"
@@ -142,7 +142,7 @@ execute_run_mode() {
   print_plan "$plan_name"
 
   printf '[%s] Starting export: db_type=%s file=%s\n' "$job_name" "${job_plan[db_type]}" "${job_plan[export_file]}"
-  if ! execute_plan_export "$plan_name" "$profile_name"; then
+  if ! execute_plan_export "$plan_name"; then
     printf '[%s] Export failed.\n' "$job_name" >&2
     return 1
   fi
@@ -169,13 +169,12 @@ process_job() {
   local props_name="$2"
   local job_name="$3"
   local -n cli_ref="$cli_name"
-  local -A profile=()
   local -A job=()
   local -A plan=()
 
   printf '== Job: %s ==\n' "$job_name"
 
-  if ! build_export_plan "$props_name" "$job_name" profile job plan; then
+  if ! build_export_plan "$props_name" "$job_name" plan; then
     printf '[%s] Plan build failed.\n' "$job_name" >&2
     return 1
   fi

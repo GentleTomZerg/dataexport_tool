@@ -16,14 +16,20 @@ printf 'key' >"$TMP_DIR/key"
 echo -n "testpassword" | openssl des3 -salt -in /dev/stdin -out "$TMP_DIR/pwd/localhost_3306_demo_user.pwd" -pass file:"$TMP_DIR/key" -pbkdf2 -iter 100000
 
 cat >"$TMP_DIR/all.properties" <<EOF
+ENV_TEST_DB_TYPE=mysql
 ENV_TEST_DB_HOST=localhost
 ENV_TEST_DB_PORT=3306
 ENV_TEST_DB_NAME=demo
 ENV_TEST_DB_USER=demo_user
-ENV_TEST_DB_TYPE=mysql
 ENV_TEST_DB_PASSWORD_FILE=$TMP_DIR/pwd/localhost_3306_demo_user.pwd
 ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
-job.users.DB_PROFILE=ENV_TEST_DB
+job.users.DB_TYPE=\${ENV_TEST_DB_TYPE}
+job.users.DB_HOST=\${ENV_TEST_DB_HOST}
+job.users.DB_PORT=\${ENV_TEST_DB_PORT}
+job.users.DB_NAME=\${ENV_TEST_DB_NAME}
+job.users.DB_USER=\${ENV_TEST_DB_USER}
+job.users.DB_PASSWORD_FILE=\${ENV_TEST_DB_PASSWORD_FILE}
+job.users.DB_PASSWORD_KEY_FILE=\${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=./exports/users_\${EXPORT_DATE}.csv
@@ -33,7 +39,6 @@ EOF
 
 declare -A PROPS=()
 declare -A RUNTIME=()
-declare -A PROFILE=()
 declare -A JOB=()
 declare -A PLAN=()
 
@@ -45,7 +50,7 @@ EXPORT_MONTH="2026-03"
 MONTH_START="2026-03-01"
 MONTH_END="2026-03-31"
 export EXPORT_DATE TODAY YESTERDAY EXPORT_MONTH MONTH_START MONTH_END
-build_export_plan PROPS users PROFILE JOB PLAN
+build_export_plan PROPS users PLAN
 PLAN[sql]="$(render_select_sql PLAN)"
 
 assert_eq "./exports/users_2026-03-17.csv" "${PLAN[export_file]}" "expanded export file"

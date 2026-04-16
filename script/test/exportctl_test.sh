@@ -36,7 +36,13 @@ ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 EOF
 
 cat >"$TMP_DIR/jobs.properties" <<'EOF'
-job.users.DB_PROFILE=ENV_TEST_DB
+job.users.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.users.DB_HOST=${ENV_TEST_DB_HOST}
+job.users.DB_PORT=${ENV_TEST_DB_PORT}
+job.users.DB_NAME=${ENV_TEST_DB_NAME}
+job.users.DB_USER=${ENV_TEST_DB_USER}
+job.users.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.users.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=${ENV_EXPORT_ROOT}/users_${EXPORT_DATE}.csv
@@ -49,6 +55,13 @@ job.users.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
 job.users.TRANSFER.MODE=copy
 job.users.TRANSFER.OVERWRITE=true
 job.users.TRANSFER.RENAME=users_${EXPORT_DATE}.gz
+job.bad.DB_TYPE=mysql
+job.bad.DB_HOST=localhost
+job.bad.DB_PORT=3306
+job.bad.DB_NAME=demo
+job.bad.DB_USER=demo_user
+job.bad.DB_PASSWORD_FILE=
+job.bad.DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 job.bad.TABLE_NAME=bad
 job.bad.COLUMNS=id
 job.bad.EXPORT_FILE=${ENV_EXPORT_ROOT}/bad.csv

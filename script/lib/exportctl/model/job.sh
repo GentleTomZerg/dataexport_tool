@@ -48,7 +48,13 @@ extract_job_fields() {
   local prefix="job.${job_name}."
 
   _out[name]="$job_name"
-  _out[db_profile]="$(props_get "$props_name" "${prefix}DB_PROFILE")"
+  _out[db_type]="$(props_get "$props_name" "${prefix}DB_TYPE")"
+  _out[db_host]="$(props_get "$props_name" "${prefix}DB_HOST")"
+  _out[db_port]="$(props_get "$props_name" "${prefix}DB_PORT")"
+  _out[db_name]="$(props_get "$props_name" "${prefix}DB_NAME")"
+  _out[db_user]="$(props_get "$props_name" "${prefix}DB_USER")"
+  _out[password_file]="$(props_get "$props_name" "${prefix}DB_PASSWORD_FILE")"
+  _out[password_key_file]="$(props_get "$props_name" "${prefix}DB_PASSWORD_KEY_FILE")"
   _out[table]="$(props_get "$props_name" "${prefix}TABLE_NAME")"
   _out[columns]="$(props_get "$props_name" "${prefix}COLUMNS")"
   _out[where]="$(props_get "$props_name" "${prefix}WHERE")"
@@ -71,7 +77,7 @@ apply_job_defaults() {
   local -n _out="$out_name"
 
   [[ -n "${_out[field_separator]}" ]] || _out[field_separator]='\t'
-  [[ -n "${_out[line_terminator]}" ]] || _out[line_terminator]=$'\n'
+  [[ -n "${_out[line_terminator]}" ]] || _out[line_terminator]='\n'
   [[ -n "${_out[compress_enabled]}" ]] || _out[compress_enabled]='false'
   [[ -n "${_out[compress_mode]}" ]] || _out[compress_mode]='tar.gz'
   [[ -n "${_out[compress_overwrite]}" ]] || _out[compress_overwrite]='false'
@@ -87,8 +93,19 @@ validate_required_fields() {
   local job_name="$2"
   local -n _out="$out_name"
 
-  if [[ -z "${_out[db_profile]}" || -z "${_out[table]}" || -z "${_out[columns]}" ]]; then
-    printf 'ERROR: invalid job %s missing required fields\n' "$job_name" >&2
+  local missing=""
+  [[ -z "${_out[db_type]:-}" ]] && missing="DB_TYPE"
+  [[ -z "${_out[db_host]:-}" ]] && missing="$missing DB_HOST"
+  [[ -z "${_out[db_port]:-}" ]] && missing="$missing DB_PORT"
+  [[ -z "${_out[db_name]:-}" ]] && missing="$missing DB_NAME"
+  [[ -z "${_out[db_user]:-}" ]] && missing="$missing DB_USER"
+  [[ -z "${_out[password_file]:-}" ]] && missing="$missing DB_PASSWORD_FILE"
+  [[ -z "${_out[password_key_file]:-}" ]] && missing="$missing DB_PASSWORD_KEY_FILE"
+  [[ -z "${_out[table]:-}" ]] && missing="$missing TABLE_NAME"
+  [[ -z "${_out[columns]:-}" ]] && missing="$missing COLUMNS"
+
+  if [[ -n "$missing" ]]; then
+    printf 'ERROR: invalid job %s missing required fields: %s\n' "$job_name" "$missing" >&2
     return 1
   fi
   return 0

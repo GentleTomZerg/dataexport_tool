@@ -29,11 +29,23 @@ ENV_TEST_DB_PASSWORD_KEY_FILE=$TMP_DIR/key
 EOF
 
 cat >"$TMP_DIR/jobs.properties" <<'EOF'
-job.users.DB_PROFILE=ENV_TEST_DB
+job.users.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.users.DB_HOST=${ENV_TEST_DB_HOST}
+job.users.DB_PORT=${ENV_TEST_DB_PORT}
+job.users.DB_NAME=${ENV_TEST_DB_NAME}
+job.users.DB_USER=${ENV_TEST_DB_USER}
+job.users.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.users.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id
 job.users.EXPORT_FILE=./users.csv
-job.orders.DB_PROFILE=ENV_TEST_DB
+job.orders.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.orders.DB_HOST=${ENV_TEST_DB_HOST}
+job.orders.DB_PORT=${ENV_TEST_DB_PORT}
+job.orders.DB_NAME=${ENV_TEST_DB_NAME}
+job.orders.DB_USER=${ENV_TEST_DB_USER}
+job.orders.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.orders.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.orders.TABLE_NAME=orders
 job.orders.COLUMNS=id
 job.orders.EXPORT_FILE=./orders.csv

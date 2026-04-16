@@ -25,7 +25,7 @@ bash script/bin/run_export.sh <date>
 bash script/bin/run_export.sh 2026-03-17
 ```
 
-默认使用 `etc/local/` 下的配置。如需测试，可修改脚本顶部：
+如需测试，可修改脚本顶部：
 
 ```bash
 USE_FAKE_BIN=true  # 使用假的 mysql 输出
@@ -41,6 +41,7 @@ USE_FAKE_BIN=true  # 使用假的 mysql 输出
 bash script/bin/exportctl.sh validate \
   --jobs-config FILE \
   --env-config FILE \
+  [--date YYYY-MM-DD] \
   [job selectors...]
 ```
 
@@ -72,33 +73,29 @@ bash script/bin/exportctl.sh run \
 
 ### 4.1 `--jobs-config FILE`（必填）
 
-Job 配置文件：
+Job 配置文件，包含 DB 连接和导出配置：
 
 ```properties
-job.<name>.DB_PROFILE=ENV_<PROFILE>  # 必须使用 ENV_* 前缀
-job.<name>.TABLE_NAME=...
-job.<name>.COLUMNS=...
-job.<name>.EXPORT_FILE=...
-job.<name>.WHERE=...
+job.users.DB_TYPE=mysql
+job.users.DB_HOST=localhost
+job.users.DB_PORT=3306
+job.users.DB_NAME=demo_db
+job.users.DB_USER=demo_user
+job.users.DB_PASSWORD_FILE=/path/to/password.pwd
+job.users.DB_PASSWORD_KEY_FILE=/path/to/keyfile
+job.users.TABLE_NAME=users
+job.users.COLUMNS=id,name,email
+job.users.EXPORT_FILE=...
 ```
 
 ### 4.2 `--env-config FILE`（必填）
 
-环境变量配置文件，包含 DB profile 和变量展开：
+环境变量配置文件，用于变量展开：
 
 ```properties
-# DB Profile 配置 (ENV_* 前缀)
-ENV_<PROFILE>_HOST=localhost
-ENV_<PROFILE>_PORT=3306
-ENV_<PROFILE>_NAME=demo_db
-ENV_<PROFILE>_USER=demo_user
-ENV_<PROFILE>_TYPE=mysql|postgres
-ENV_<PROFILE>_PASSWORD_FILE=/path/to/password.pwd
-ENV_<PROFILE>_PASSWORD_KEY_FILE=/path/to/keyfile
-
-# 其他环境变量
-ENV_WORK_PATH=/path/to/work
-ENV_EXPORT_ROOT=./exports
+ENV_WORK_PATH=/home/tom/Projects/dataexport
+ENV_EDP_OUT_PATH=/home/tom/Projects/gtpdata/edp/out
+ENV_GTP_TEMP_PATH=/home/tom/Projects/gtpdata/temp
 ```
 
 ### 4.3 `--date YYYY-MM-DD`（可选）
@@ -125,29 +122,24 @@ bash script/bin/exportctl.sh run ... users orders
 
 ## 5. 配置示例
 
-### 5.1 env.properties（DB Profile + 环境变量）
+### 5.1 env.properties（环境变量）
 
 ```properties
-# ===== 环境路径 =====
 ENV_WORK_PATH=/home/tom/Projects/dataexport
 ENV_EDP_OUT_PATH=/home/tom/Projects/gtpdata/edp/out
 ENV_GTP_TEMP_PATH=/home/tom/Projects/gtpdata/temp
-
-# ===== DB Profile (ENV_* 前缀) =====
-ENV_LENS_MNGT_TDSQL_HOST=localhost
-ENV_LENS_MNGT_TDSQL_PORT=3306
-ENV_LENS_MNGT_TDSQL_NAME=demo_db
-ENV_LENS_MNGT_TDSQL_USER=demo_user
-ENV_LENS_MNGT_TDSQL_TYPE=mysql
-ENV_LENS_MNGT_TDSQL_PASSWORD_DIR=${ENV_WORK_PATH}/etc/local/pwd
-ENV_LENS_MNGT_TDSQL_PASSWORD_FILE=${ENV_LENS_MNGT_TDSQL_PASSWORD_DIR}/localhost_3306_demo_user.pwd
-ENV_LENS_MNGT_TDSQL_PASSWORD_KEY_FILE=${ENV_LENS_MNGT_TDSQL_PASSWORD_DIR}/keyfile
 ```
 
-### 5.2 jobs.properties（Job 配置）
+### 5.2 jobs.properties（Job 配置 + DB）
 
 ```properties
-job.users.DB_PROFILE=ENV_LENS_MNGT_TDSQL
+job.users.DB_TYPE=${ENV_LENS_MNGT_TDSQL_TYPE}
+job.users.DB_HOST=${ENV_LENS_MNGT_TDSQL_HOST}
+job.users.DB_PORT=${ENV_LENS_MNGT_TDSQL_PORT}
+job.users.DB_NAME=${ENV_LENS_MNGT_TDSQL_NAME}
+job.users.DB_USER=${ENV_LENS_MNGT_TDSQL_USER}
+job.users.DB_PASSWORD_FILE=${ENV_LENS_MNGT_TDSQL_PASSWORD_FILE}
+job.users.DB_PASSWORD_KEY_FILE=${ENV_LENS_MNGT_TDSQL_PASSWORD_KEY_FILE}
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email
 job.users.EXPORT_FILE=${ENV_GTP_TEMP_PATH}/users_${EXPORT_DATE}.csv
@@ -156,30 +148,22 @@ job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
 
 ## 6. 配置字段参考
 
-### 6.1 DB Profile 必填字段（ENV_* 前缀）
-
-> **注意**：DB profile 配置在 `env.properties` 中，使用 `ENV_<PROFILE>_` 前缀
+### 6.1 Job 必填字段
 
 | 字段 | 说明 | 示例 |
 |-----|------|------|
-| `ENV_<PROFILE>_HOST` | 数据库主机 | `localhost` |
-| `ENV_<PROFILE>_PORT` | 端口 | `3306` |
-| `ENV_<PROFILE>_NAME` | 数据库名 | `demo_db` |
-| `ENV_<PROFILE>_USER` | 用户名 | `demo_user` |
-| `ENV_<PROFILE>_TYPE` | 类型 | `mysql` 或 `postgres` |
-| `ENV_<PROFILE>_PASSWORD_FILE` | 密码文件 | `./pwd/host_port_user.pwd` |
-| `ENV_<PROFILE>_PASSWORD_KEY_FILE` | 密钥文件 | `./pwd/keyfile` |
-
-### 6.2 Job 必填字段
-
-| 字段 | 说明 | 示例 |
-|-----|------|------|
-| `job.<name>.DB_PROFILE` | 引用 DB profile（ENV_* 前缀） | `ENV_LENS_MNGT_TDSQL` |
+| `job.<name>.DB_TYPE` | 数据库类型 | `mysql` 或 `postgres` |
+| `job.<name>.DB_HOST` | 数据库主机 | `localhost` |
+| `job.<name>.DB_PORT` | 端口 | `3306` |
+| `job.<name>.DB_NAME` | 数据库名 | `demo_db` |
+| `job.<name>.DB_USER` | 用户名 | `demo_user` |
+| `job.<name>.DB_PASSWORD_FILE` | 密码文件 | `./pwd/host_port_user.pwd` |
+| `job.<name>.DB_PASSWORD_KEY_FILE` | 密钥文件 | `./pwd/keyfile` |
 | `job.<name>.TABLE_NAME` | 表名 | `users` |
 | `job.<name>.COLUMNS` | 列名 | `id,name,email` |
 | `job.<name>.EXPORT_FILE` | 导出路径 | `./exports/users.csv` |
 
-### 6.3 Job 可选字段及默认值
+### 6.2 Job 可选字段及默认值
 
 | 字段 | 默认值 | 说明 |
 |-----|-------|------|
@@ -197,7 +181,7 @@ job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
 | `job.<name>.TRANSFER.RENAME` | 空 | 目标文件名模板 |
 | `job.<name>.SPLIT.<column>` | 无 | 列拆分：`chunk_size,chunks` |
 
-### 6.4 列拆分说明
+### 6.3 列拆分说明
 
 格式：`job.<name>.SPLIT.<column>=chunk_size,chunks`
 
@@ -229,12 +213,12 @@ Summary: total=1 ok=1 failed=0
 ### plan 输出
 
 ```
-== Runtime ==
-...
-
 == Job: users ==
-DB_PROFILE=ENV_LENS_MNGT_TDSQL
 DB_TYPE=mysql
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=demo
+DB_USER=demo_user
 TABLE=users
 SQL=SELECT id,name FROM users WHERE status = 'active'
 [users] Plan generated.
@@ -261,14 +245,12 @@ Summary: total=1 ok=1 failed=0
 
 ## 9. 配置文件位置
 
-| 配置文件 | 路径 | 说明 |
-|---------|------|------|
-| Job 配置 | `etc/local/jobs.properties` | 导出任务配置 |
-| 环境变量 + DB Profile | `etc/env.properties` | 包含 ENV_* 前缀的 DB profile 配置 |
+| 配置文件 | 路径 |
+|---------|------|
+| Job 配置 | `etc/local/jobs.properties` |
+| 环境变量 | `etc/env.properties` |
 
 ## 10. 测试验证
-
-运行测试套件：
 
 ```bash
 bash script/test/run_all.sh
@@ -278,26 +260,17 @@ bash script/test/run_all.sh
 
 密码文件使用 OpenSSL DES3 加密：
 
-### 11.1 生成加密密码
-
 ```bash
-# 手动生成
 echo -n "my_password" | openssl des3 -salt -in /dev/stdin \
   -out /path/to/output.pwd \
   -pass file:/path/to/keyfile \
   -pbkdf2 -iter 100000
 ```
 
-### 11.2 密码文件命名规则
-
-```
-<HOST>_<PORT>_<USER>.pwd
-例如：localhost_3306_demo_user.pwd
-```
+密码文件命名：`HOST_PORT_USER.pwd`，如 `localhost_3306_demo_user.pwd`
 
 ## 12. 限制
 
 - `WHERE` 是原始 SQL，不做校验
 - 只支持 `mysql` 和 `postgres`
 - 列拆分仅对 MySQL 生效
-- DB profile 必须使用 `ENV_*` 前缀

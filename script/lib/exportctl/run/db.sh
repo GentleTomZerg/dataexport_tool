@@ -2,6 +2,18 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/credentials.sh"
 
+_sanitize_fields() {
+  awk -v FS='\t' -v OFS='\t' '
+    {
+      for (i=1; i<=NF; i++) {
+        if ($i == "NULL") $i = "";
+        gsub(/\|!/, "|?", $i);
+      }
+      $1=$1; print
+    }
+  '
+}
+
 _apply_separators() {
   local field_sep_raw="$1"
   local line_term_raw="$2"
@@ -13,9 +25,6 @@ _apply_separators() {
       gsub(/\\t/,"\t",ORS); gsub(/\\n/,"\n",ORS); gsub(/\\r/,"\r",ORS);
     }
     {
-      for (i=1; i<=NF; i++) {
-        if ($i == "NULL") $i = "";
-      }
       $1=$1; print
     }
   '
@@ -38,7 +47,9 @@ execute_plan_export() {
       -P "${_plan[db_port]}" \
       -u "${_plan[db_user]}" \
       "${_plan[db_name]}" \
-      -e "${_plan[sql]}" 2>"$error_file" | _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
+      -e "${_plan[sql]}" 2>"$error_file" |
+      _sanitize_fields |
+      _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   postgres)
     PGPASSWORD="$password" psql \
@@ -47,6 +58,7 @@ execute_plan_export() {
       -U "${_plan[db_user]}" \
       -d "${_plan[db_name]}" \
       -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" 2>"$error_file" |
+      _sanitize_fields |
       _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   *)
@@ -56,10 +68,18 @@ execute_plan_export() {
     ;;
   esac
 
-  local db_exit_code=${PIPESTATUS[0]}
+  local -a pipeline_status=("${PIPESTATUS[@]}")
+  local db_exit_code=${pipeline_status[0]:-1}
+  local sanitize_exit_code=${pipeline_status[1]:-1}
+  local format_exit_code=${pipeline_status[2]:-1}
   if [[ "$db_exit_code" -ne 0 ]]; then
     printf 'ERROR: %s failed for %s: %s\n' "${_plan[db_type]}" "${_plan[db_name]}" "$(cat "$error_file")" >&2
     rm -f "$error_file"
+    return 1
+  fi
+  if [[ "$sanitize_exit_code" -ne 0 || "$format_exit_code" -ne 0 ]]; then
+    rm -f "$error_file"
+    printf 'ERROR: transform pipeline failed for %s export\n' "${_plan[db_name]}" >&2
     return 1
   fi
 

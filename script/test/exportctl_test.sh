@@ -19,7 +19,7 @@ echo -n "testpassword" | openssl des3 -salt -in /dev/stdin -out "$TMP_DIR/pwd/lo
 cat >"$TMP_DIR/bin/mysql" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '1\tAlice\n2\tBob\n'
+printf '1\tAlice|!A|!\n2\tNULL\n'
 EOF
 chmod +x "$TMP_DIR/bin/mysql"
 
@@ -96,8 +96,12 @@ assert_contains "[users] Transfer finished: src=./exports/users_2026-03-17.csv.g
 assert_contains "[users] Final artifact ready: file=./exports_transfer/users_2026-03-17.gz" "$run_output" "final artifact log"
 assert_contains "[users] Completed successfully." "$run_output" "run success log"
 assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv' ]]" "export file created"
+export_content="$(cat "$PROJECT_DIR/exports/users_2026-03-17.csv")"
+assert_contains $'1\tAlice|?A|?\n2\t' "$export_content" "sanitizes |! and NULL with configured separators"
 assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv.gz' ]]" "compressed file created"
 assert_true "[[ -f '$PROJECT_DIR/exports_transfer/users_2026-03-17.gz' ]]" "transferred file created"
+transfer_content="$(gzip -cd "$PROJECT_DIR/exports_transfer/users_2026-03-17.gz")"
+assert_contains $'1\tAlice|?A|?\n2\t' "$transfer_content" "transferred artifact keeps transformed content"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 if "$ROOT_DIR/bin/exportctl.sh" run >/dev/null 2>&1; then

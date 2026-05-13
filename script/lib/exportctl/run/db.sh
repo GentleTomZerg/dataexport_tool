@@ -3,11 +3,16 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/credentials.sh"
 
 _sanitize_fields() {
-  awk -v FS='\t' -v OFS='\t' '
+  local replacement="$1"
+  awk -v FS='\t' -v OFS='\t' -v REPLACEMENT="$replacement" '
+    BEGIN{
+      replacement = REPLACEMENT
+      gsub(/&/, "\\&", replacement)
+    }
     {
       for (i=1; i<=NF; i++) {
         if ($i == "NULL") $i = "";
-        gsub(/\|!/, "|?", $i);
+        gsub(/\|!/, replacement, $i);
       }
       $1=$1; print
     }
@@ -48,7 +53,7 @@ execute_plan_export() {
       -u "${_plan[db_user]}" \
       "${_plan[db_name]}" \
       -e "${_plan[sql]}" 2>"$error_file" |
-      _sanitize_fields |
+      _sanitize_fields "${_plan[field_separator_data_replacement]}" |
       _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   postgres)
@@ -58,7 +63,7 @@ execute_plan_export() {
       -U "${_plan[db_user]}" \
       -d "${_plan[db_name]}" \
       -c "\\copy (${_plan[sql]}) TO STDOUT WITH (FORMAT text, DELIMITER E'\\t')" 2>"$error_file" |
-      _sanitize_fields |
+      _sanitize_fields "${_plan[field_separator_data_replacement]}" |
       _apply_separators "${_plan[field_separator]}" "${_plan[line_terminator]}" >"${_plan[export_file]}"
     ;;
   *)

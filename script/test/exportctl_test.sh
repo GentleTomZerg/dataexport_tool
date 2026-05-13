@@ -46,6 +46,7 @@ job.users.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name
 job.users.EXPORT_FILE=${ENV_EXPORT_ROOT}/users_${EXPORT_DATE}.csv
+job.users.FIELD_SEPARATOR_DATA_REPLACEMENT=|X
 job.users.WHERE=status = 'active'
 job.users.COMPRESS.ENABLED=true
 job.users.COMPRESS.MODE=gz
@@ -55,6 +56,16 @@ job.users.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
 job.users.TRANSFER.MODE=copy
 job.users.TRANSFER.OVERWRITE=true
 job.users.TRANSFER.RENAME=users_${EXPORT_DATE}.gz
+job.default.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.default.DB_HOST=${ENV_TEST_DB_HOST}
+job.default.DB_PORT=${ENV_TEST_DB_PORT}
+job.default.DB_NAME=${ENV_TEST_DB_NAME}
+job.default.DB_USER=${ENV_TEST_DB_USER}
+job.default.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.default.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
+job.default.TABLE_NAME=users
+job.default.COLUMNS=id,name
+job.default.EXPORT_FILE=${ENV_EXPORT_ROOT}/default_${EXPORT_DATE}.csv
 job.bad.DB_TYPE=mysql
 job.bad.DB_HOST=localhost
 job.bad.DB_PORT=3306
@@ -71,7 +82,7 @@ plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --job
 assert_contains "== Job: users ==" "$plan_output" "plan includes users"
 assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
 assert_contains "[bad] Plan build failed." "$plan_output" "bad job logged"
-assert_contains "Summary: total=2 ok=1 failed=1" "$plan_output" "summary counts"
+assert_contains "Summary: total=3 ok=2 failed=1" "$plan_output" "summary counts"
 assert_contains "== Environment ==" "$plan_output" "environment block printed"
 assert_contains "ENV_EXPORT_ROOT=./exports" "$plan_output" "export env printed"
 assert_contains "SQL=SELECT id,name FROM users WHERE status = 'active'" "$plan_output" "plan prints sql"
@@ -97,11 +108,17 @@ assert_contains "[users] Final artifact ready: file=./exports_transfer/users_202
 assert_contains "[users] Completed successfully." "$run_output" "run success log"
 assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv' ]]" "export file created"
 export_content="$(cat "$PROJECT_DIR/exports/users_2026-03-17.csv")"
-assert_contains $'1\tAlice|?A|?\n2\t' "$export_content" "sanitizes |! and NULL with configured separators"
+assert_contains $'1\tAlice|XA|X\n2\t' "$export_content" "sanitizes |! and NULL with configured replacement"
 assert_true "[[ -f '$PROJECT_DIR/exports/users_2026-03-17.csv.gz' ]]" "compressed file created"
 assert_true "[[ -f '$PROJECT_DIR/exports_transfer/users_2026-03-17.gz' ]]" "transferred file created"
 transfer_content="$(gzip -cd "$PROJECT_DIR/exports_transfer/users_2026-03-17.gz")"
-assert_contains $'1\tAlice|?A|?\n2\t' "$transfer_content" "transferred artifact keeps transformed content"
+assert_contains $'1\tAlice|XA|X\n2\t' "$transfer_content" "transferred artifact keeps transformed content"
+
+default_run_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 default 2>&1)"
+assert_contains "[default] Completed successfully." "$default_run_output" "default replacement job succeeds"
+assert_true "[[ -f '$PROJECT_DIR/exports/default_2026-03-17.csv' ]]" "default export file created"
+default_content="$(cat "$PROJECT_DIR/exports/default_2026-03-17.csv")"
+assert_contains $'1\tAlice|?A|?\n2\t' "$default_content" "uses |? default replacement when key is absent"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 if "$ROOT_DIR/bin/exportctl.sh" run >/dev/null 2>&1; then

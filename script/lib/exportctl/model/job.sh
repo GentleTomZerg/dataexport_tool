@@ -61,6 +61,7 @@ extract_job_fields() {
   _out[export_file]="$(props_get "$props_name" "${prefix}EXPORT_FILE")"
   _out[field_separator]="$(props_get "$props_name" "${prefix}FIELD_SEPARATOR")"
   _out[line_terminator]="$(props_get "$props_name" "${prefix}LINE_TERMINATOR")"
+  _out[field_separator_data_replacement]="$(props_get "$props_name" "${prefix}FIELD_SEPARATOR_DATA_REPLACEMENT")"
   _out[compress_enabled]="$(props_get "$props_name" "${prefix}COMPRESS.ENABLED")"
   _out[compress_mode]="$(props_get "$props_name" "${prefix}COMPRESS.MODE")"
   _out[compress_overwrite]="$(props_get "$props_name" "${prefix}COMPRESS.OVERWRITE")"
@@ -78,6 +79,7 @@ apply_job_defaults() {
 
   [[ -n "${_out[field_separator]}" ]] || _out[field_separator]='\t'
   [[ -n "${_out[line_terminator]}" ]] || _out[line_terminator]='\n'
+  [[ -n "${_out[field_separator_data_replacement]}" ]] || _out[field_separator_data_replacement]='|?'
   [[ -n "${_out[compress_enabled]}" ]] || _out[compress_enabled]='false'
   [[ -n "${_out[compress_mode]}" ]] || _out[compress_mode]='tar.gz'
   [[ -n "${_out[compress_overwrite]}" ]] || _out[compress_overwrite]='false'

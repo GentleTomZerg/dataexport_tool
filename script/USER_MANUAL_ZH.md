@@ -144,6 +144,7 @@ job.users.TABLE_NAME=users
 job.users.COLUMNS=id,name,email
 job.users.EXPORT_FILE=${ENV_GTP_TEMP_PATH}/users_${EXPORT_DATE}.csv
 job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
+job.users.FIELD_SEPARATOR_DATA_REPLACEMENT=|?
 ```
 
 ## 6. 配置字段参考
@@ -169,6 +170,7 @@ job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
 |-----|-------|------|
 | `job.<name>.WHERE` | 空 | SQL 条件，原样拼入 |
 | `job.<name>.FIELD_SEPARATOR` | `\t` | 字段分隔符 |
+| `job.<name>.FIELD_SEPARATOR_DATA_REPLACEMENT` | `\|?` | 将字段数据中的 `\|!` 替换为该值（防止与分隔符冲突） |
 | `job.<name>.LINE_TERMINATOR` | `\n` | 行终止符 |
 | `job.<name>.COMPRESS.ENABLED` | `false` | 是否启用压缩 |
 | `job.<name>.COMPRESS.MODE` | `tar.gz` | 压缩格式：`gz`, `tar`, `tar.gz`, `tgz` |
@@ -180,6 +182,9 @@ job.users.WHERE=create_at between ${YESTERDAY} and ${TODAY}
 | `job.<name>.TRANSFER.OVERWRITE` | `false` | 目标文件存在时覆盖 |
 | `job.<name>.TRANSFER.RENAME` | 空 | 目标文件名模板 |
 | `job.<name>.SPLIT.<column>` | 无 | 列拆分：`chunk_size,chunks` |
+
+`job.<name>.FIELD_SEPARATOR_DATA_REPLACEMENT` 为非必填项，未配置时默认值为 `|?`。
+该配置仅影响字段数据中的 `|!` 替换，不影响 `FIELD_SEPARATOR` 与 `LINE_TERMINATOR` 本身配置。
 
 ### 6.3 列拆分说明
 

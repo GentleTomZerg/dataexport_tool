@@ -26,6 +26,7 @@ build_export_plan() {
   _plan[export_file]="${job[export_file]}"
   _plan[field_separator]="${job[field_separator]}"
   _plan[line_terminator]="${job[line_terminator]}"
+  _plan[field_separator_data_replacement]="${job[field_separator_data_replacement]}"
   _plan[compress_enabled]="${job[compress_enabled],,}"
   _plan[compress_mode]="${job[compress_mode],,}"
   _plan[compress_overwrite]="${job[compress_overwrite],,}"

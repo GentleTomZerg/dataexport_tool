@@ -117,6 +117,12 @@ print_plan() {
   printf 'LINE_TERMINATOR=%s\n' "${job_plan[line_terminator]}"
   printf 'PASSWORD_FILE=%s\n' "${job_plan[password_file]:-}"
   printf 'PASSWORD_KEY_FILE=%s\n' "${job_plan[password_key_file]:-}"
+  if [[ "${job_plan[file_split_enabled]}" == "true" ]]; then
+    printf 'FILE_SPLIT=size=%s index_width=%s export_template=%s\n' \
+      "${job_plan[file_split_max_size]}" "${job_plan[file_split_index_width]}" "${job_plan[export_file]}"
+  else
+    printf 'FILE_SPLIT=disabled\n'
+  fi
   printf 'SQL=%s\n' "${job_plan[sql]}"
   printf '\n'
 }

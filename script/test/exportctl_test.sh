@@ -86,6 +86,7 @@ assert_contains "Summary: total=3 ok=2 failed=1" "$plan_output" "summary counts"
 assert_contains "== Environment ==" "$plan_output" "environment block printed"
 assert_contains "ENV_EXPORT_ROOT=./exports" "$plan_output" "export env printed"
 assert_contains "SQL=SELECT id,name FROM users WHERE status = 'active'" "$plan_output" "plan prints sql"
+assert_contains "FILE_SPLIT=disabled" "$plan_output" "plan prints disabled file split"
 assert_contains "[users] Plan generated." "$plan_output" "plan success note"
 
 validate_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" validate --jobs-config "$TMP_DIR/jobs.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 2>&1)"
@@ -163,6 +164,11 @@ job.splitfail.FILE_SPLIT.MAX_SIZE=1G
 job.splitfail.COMPRESS.ENABLED=true
 job.splitfail.COMPRESS.MODE=gz
 EOF
+
+# FILE_SPLIT plan display: enabled jobs echo size/index_width/export_template.
+split_plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --jobs-config "$TMP_DIR/split.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 split splitfail 2>&1)"
+assert_contains "FILE_SPLIT=size=1 index_width=2 export_template=./exports/\${PART}-split_2026-03-17.csv" "$split_plan_output" "plan prints enabled file split config"
+assert_contains "FILE_SPLIT=size=1G index_width=2 export_template=./exports/\${PART}-splitfail_2026-03-17.csv" "$split_plan_output" "plan prints size suffix verbatim"
 
 mkdir -p "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 # Stale parts from an earlier run: indices 02 and 09 must be removed, the

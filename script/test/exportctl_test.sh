@@ -121,6 +121,90 @@ default_content="$(cat "$PROJECT_DIR/exports/default_2026-03-17.csv")"
 assert_contains $'1\tAlice|?A|?\n2\t' "$default_content" "uses |? default replacement when key is absent"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
+###############################################################################
+# FILE_SPLIT run: draft lifecycle, stale cleanup, per-part transfer
+###############################################################################
+
+cat >"$TMP_DIR/split.properties" <<'EOF'
+job.split.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.split.DB_HOST=${ENV_TEST_DB_HOST}
+job.split.DB_PORT=${ENV_TEST_DB_PORT}
+job.split.DB_NAME=${ENV_TEST_DB_NAME}
+job.split.DB_USER=${ENV_TEST_DB_USER}
+job.split.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.split.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
+job.split.TABLE_NAME=users
+job.split.COLUMNS=id,name
+job.split.EXPORT_FILE=${ENV_EXPORT_ROOT}/${PART}-split_${EXPORT_DATE}.csv
+job.split.FILE_SPLIT.ENABLED=true
+job.split.FILE_SPLIT.MAX_SIZE=1
+job.split.FILE_SPLIT.INDEX_WIDTH=2
+job.split.COMPRESS.ENABLED=true
+job.split.COMPRESS.MODE=gz
+job.split.COMPRESS.OVERWRITE=true
+job.split.COMPRESS.REMOVE_ORIGINAL=false
+job.split.TRANSFER.ENABLED=true
+job.split.TRANSFER.DIR=${ENV_TRANSFER_ROOT}
+job.split.TRANSFER.MODE=copy
+job.split.TRANSFER.OVERWRITE=true
+job.split.TRANSFER.RENAME=${PART}-split_${EXPORT_DATE}.gz
+job.splitfail.DB_TYPE=oracle
+job.splitfail.DB_HOST=${ENV_TEST_DB_HOST}
+job.splitfail.DB_PORT=${ENV_TEST_DB_PORT}
+job.splitfail.DB_NAME=${ENV_TEST_DB_NAME}
+job.splitfail.DB_USER=${ENV_TEST_DB_USER}
+job.splitfail.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.splitfail.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
+job.splitfail.TABLE_NAME=users
+job.splitfail.COLUMNS=id,name
+job.splitfail.EXPORT_FILE=${ENV_EXPORT_ROOT}/${PART}-splitfail_${EXPORT_DATE}.csv
+job.splitfail.FILE_SPLIT.ENABLED=true
+job.splitfail.FILE_SPLIT.MAX_SIZE=1G
+job.splitfail.COMPRESS.ENABLED=true
+job.splitfail.COMPRESS.MODE=gz
+EOF
+
+mkdir -p "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
+# Stale parts from an earlier run: indices 02 and 09 must be removed, the
+# transfer directory must be left alone.
+printf 'stale\n' >"$PROJECT_DIR/exports/02-split_2026-03-17.csv"
+printf 'stale\n' >"$PROJECT_DIR/exports/09-split_2026-03-17.csv"
+printf 'stale\n' >"$PROJECT_DIR/exports_transfer/07-split_2026-03-17.gz"
+split_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/split.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 split 2>&1)"
+assert_contains "[split] Completed successfully." "$split_output" "split job succeeds"
+assert_contains "[split] Part ready: index=00" "$split_output" "split reports part 00"
+assert_contains "[split] Part ready: index=01" "$split_output" "split reports part 01"
+assert_contains "[split] Split finished: parts=2 lines=2" "$split_output" "split summary keeps line count and part count"
+assert_contains "[split] Transferring part: index=00" "$split_output" "split transfers part 00"
+assert_contains "[split] Transferring part: index=01" "$split_output" "split transfers part 01"
+assert_contains "[split] Final artifact ready: file=./exports_transfer/00-split_2026-03-17.gz" "$split_output" "final artifact logged per part (00)"
+assert_contains "[split] Final artifact ready: file=./exports_transfer/01-split_2026-03-17.gz" "$split_output" "final artifact logged per part (01)"
+assert_contains "[split] Removed stale part: file=./exports/02-split_2026-03-17.csv" "$split_output" "stale part 02 removal logged"
+assert_contains "[split] Removed stale part: file=./exports/09-split_2026-03-17.csv" "$split_output" "stale part 09 removal logged"
+
+assert_eq "" "$(find "$PROJECT_DIR/exports" -maxdepth 1 -name '.file_split.*' -print)" "draft dir removed after success"
+assert_true "[[ -f '$PROJECT_DIR/exports/00-split_2026-03-17.csv' ]]" "part 00 exists in export dir"
+assert_true "[[ -f '$PROJECT_DIR/exports/01-split_2026-03-17.csv' ]]" "part 01 exists in export dir"
+assert_true "[[ ! -e '$PROJECT_DIR/exports/02-split_2026-03-17.csv' ]]" "stale part 02 removed"
+assert_true "[[ ! -e '$PROJECT_DIR/exports/09-split_2026-03-17.csv' ]]" "stale part 09 removed"
+assert_true "[[ -f '$PROJECT_DIR/exports_transfer/00-split_2026-03-17.gz' ]]" "part 00 transferred"
+assert_true "[[ -f '$PROJECT_DIR/exports_transfer/01-split_2026-03-17.gz' ]]" "part 01 transferred"
+assert_true "[[ -f '$PROJECT_DIR/exports_transfer/07-split_2026-03-17.gz' ]]" "transfer directory left untouched"
+split_joined="$(for part in 00 01; do gzip -cd "$PROJECT_DIR/exports/$part-split_2026-03-17.csv"; done)"
+assert_eq $'1\tAlice|?A|?\n2\t' "$split_joined" "split parts preserve every row in order"
+
+# Failure path: the draft must not survive a failed Pass 1 either.
+mkdir -p "$PROJECT_DIR/exports"
+splitfail_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/split.properties" --env-config "$TMP_DIR/env.properties" --date 2026-03-17 splitfail 2>&1)"
+assert_contains "[splitfail] Export failed." "$splitfail_output" "split failure is logged"
+if [[ "$splitfail_output" == *'Completed successfully'* ]]; then
+  echo "FAIL: failed split job does not report success" >&2
+  exit 1
+fi
+assert_eq "" "$(find "$PROJECT_DIR/exports" -maxdepth 1 -name '.file_split.*' -print)" "draft dir removed after failure"
+assert_true "[[ ! -e '$PROJECT_DIR/exports/00-splitfail_2026-03-17.csv' ]]" "failed split job produces no part"
+rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
+
 if "$ROOT_DIR/bin/exportctl.sh" run >/dev/null 2>&1; then
   echo "FAIL: expected invalid args to exit non-zero" >&2
   exit 1

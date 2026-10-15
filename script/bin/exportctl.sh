@@ -9,6 +9,7 @@ source "$ROOT_DIR/lib/exportctl/model/plan.sh"
 source "$ROOT_DIR/lib/exportctl/sql.sh"
 source "$ROOT_DIR/lib/exportctl/run/db.sh"
 source "$ROOT_DIR/lib/exportctl/run/artifact.sh"
+source "$ROOT_DIR/lib/exportctl/run/split.sh"
 
 setup_shell
 
@@ -141,6 +142,11 @@ execute_run_mode() {
 
   print_plan "$plan_name"
 
+  if [[ "${job_plan[file_split_enabled]}" == "true" ]]; then
+    execute_split_run_mode "$plan_name" "$job_name"
+    return $?
+  fi
+
   printf '[%s] Starting export: db_type=%s file=%s\n' "$job_name" "${job_plan[db_type]}" "${job_plan[export_file]}"
   if ! execute_plan_export "$plan_name"; then
     printf '[%s] Export failed.\n' "$job_name" >&2
@@ -162,6 +168,121 @@ execute_run_mode() {
   fi
 
   printf '[%s] Completed successfully.\n' "$job_name"
+}
+
+# FILE_SPLIT run: export once to a draft CSV, split the draft into gzipped parts,
+# drop stale parts from earlier runs and transfer every part individually. The
+# draft lives in the export directory and is removed on success and failure.
+execute_split_run_mode() {
+  local plan_name="$1"
+  local job_name="$2"
+  local -n job_plan="$plan_name"
+  local export_template="${job_plan[export_file]}"
+  local export_dir
+
+  export_dir="$(dirname "$export_template")"
+  mkdir -p "$export_dir" || return 1
+
+  (
+    local draft_dir draft_csv
+    local export_lines export_bytes total_gz part_count
+    local record index lines bytes_csv bytes_gz gz_path artifact display_index
+
+    draft_dir="$(mktemp -d "$export_dir/.file_split.${job_name}.XXXXXX")" || {
+      printf 'ERROR: job %s FILE_SPLIT could not create a draft dir under %s\n' "$job_name" "$export_dir" >&2
+      return 1
+    }
+    trap 'rm -rf "$draft_dir"' EXIT
+    draft_csv="$draft_dir/rows.csv"
+
+    job_plan[export_file]="$draft_csv"
+    printf '[%s] Starting export: db_type=%s file=%s\n' "$job_name" "${job_plan[db_type]}" "$export_template"
+    if ! execute_plan_export "$plan_name"; then
+      printf '[%s] Export failed.\n' "$job_name" >&2
+      return 1
+    fi
+    job_plan[export_file]="$export_template"
+
+    export_lines="$(file_line_count "$draft_csv")"
+    export_bytes="$(file_byte_size "$draft_csv")"
+    printf '[%s] Export finished: file=%s lines=%s bytes_csv=%s\n' \
+      "$job_name" "$export_template" "$export_lines" "$export_bytes"
+
+    if ! split_and_compress_parts "$draft_csv" "$plan_name"; then
+      printf '[%s] File split failed.\n' "$job_name" >&2
+      return 1
+    fi
+
+    part_count="${job_plan[part_count]}"
+    total_gz=0
+    while IFS= read -r record; do
+      [[ -n "$record" ]] || continue
+      IFS='|' read -r index lines bytes_csv bytes_gz gz_path <<<"$record"
+      display_index="$(format_part_index "$index" "${job_plan[file_split_index_width]}")" || return 1
+      printf '[%s] Part ready: index=%s file=%s lines=%s bytes_csv=%s bytes_gz=%s\n' \
+        "$job_name" "$display_index" "$gz_path" "$lines" "$bytes_csv" "$bytes_gz"
+      total_gz=$((total_gz + bytes_gz))
+    done < <(printf '%s\n' "${job_plan[parts]}")
+
+    printf '[%s] Split finished: parts=%s lines=%s bytes_csv=%s bytes_gz=%s\n' \
+      "$job_name" "$part_count" "$export_lines" "$export_bytes" "$total_gz"
+
+    if ! cleanup_stale_split_parts "$plan_name"; then
+      printf '[%s] Stale part cleanup failed.\n' "$job_name" >&2
+      return 1
+    fi
+
+    if ! run_split_artifact_pipeline "$plan_name"; then
+      printf '[%s] Artifact pipeline failed.\n' "$job_name" >&2
+      return 1
+    fi
+
+    while IFS= read -r artifact; do
+      [[ -n "$artifact" ]] || continue
+      if [[ -f "$artifact" ]]; then
+        printf '[%s] Final artifact ready: file=%s bytes=%s\n' "$job_name" "$artifact" "$(file_byte_size "$artifact")"
+      fi
+    done < <(printf '%s\n' "${job_plan[part_artifact_paths]}")
+
+    printf '[%s] Completed successfully.\n' "$job_name"
+  )
+}
+
+# Remove parts from earlier runs in the export directory: any file whose name
+# matches the rendered EXPORT_FILE part template but carries an index >= the
+# number of parts produced this run. The transfer directory is deliberately not
+# touched - downstream consumes and removes its own files.
+cleanup_stale_split_parts() {
+  local plan_name="$1"
+  local -n job_plan="$plan_name"
+  local template="${job_plan[export_file]}"
+  local job_name="${job_plan[job_name]}"
+  local part_count="${job_plan[part_count]:-0}"
+  local marker='${PART}'
+  local before after candidate captured_index scan_dir
+
+  if [[ "$template" != *"$marker"* ]]; then
+    printf 'ERROR: job %s FILE_SPLIT EXPORT_FILE is missing %s\n' "$job_name" "$marker" >&2
+    return 1
+  fi
+
+  before="${template%%"$marker"*}"
+  [[ -n "$before" ]] || before="./"
+  after="${template#*"$marker"}"
+  scan_dir="${before%/*}"
+  [[ "$scan_dir" == "$before" ]] && scan_dir="."
+  [[ -n "$scan_dir" ]] || scan_dir="/"
+
+  for candidate in "$scan_dir"/*; do
+    [[ -f "$candidate" ]] || continue
+    [[ "$candidate" == "$before"*"$after" ]] || continue
+    captured_index="${candidate#"$before"}"
+    captured_index="${captured_index%"$after"}"
+    [[ "$captured_index" =~ ^[0-9]+$ ]] || continue
+    (( 10#$captured_index >= part_count )) || continue
+    rm -f "$candidate" || return 1
+    printf '[%s] Removed stale part: file=%s\n' "$job_name" "$candidate"
+  done
 }
 
 process_job() {

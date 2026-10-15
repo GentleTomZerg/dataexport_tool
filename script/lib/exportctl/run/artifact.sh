@@ -144,3 +144,44 @@ run_artifact_pipeline() {
 
   job_plan[artifact_path]="$artifact"
 }
+
+# Transfer every FILE_SPLIT part through the job's TRANSFER.* settings.
+# Reads the newline-separated `parts` records (`index|lines|bytes_csv|bytes_gz|gz_path`),
+# renders ${PART} with each record's index and stores the destinations in the
+# plan as `part_artifact_paths` (newline-separated). The parts are already
+# gzipped by the split pass, so compression is not repeated here. When TRANSFER
+# is disabled the gz parts themselves are the final artifacts.
+run_split_artifact_pipeline() {
+  local plan_name="$1"
+  local -n job_plan="$plan_name"
+  local records="${job_plan[parts]:-}"
+  local record index gz_path artifact display_index
+  local -a artifact_paths=()
+
+  if [[ -z "$records" ]]; then
+    printf 'ERROR: job %s FILE_SPLIT produced no parts\n' "${job_plan[job_name]:-}" >&2
+    return 1
+  fi
+
+  while IFS= read -r record; do
+    [[ -n "$record" ]] || continue
+    IFS='|' read -r index _ _ _ gz_path <<<"$record"
+    display_index="$(format_part_index "$index" "${job_plan[file_split_index_width]}")" || return 1
+
+    if [[ "${job_plan[transfer_enabled]}" == "true" ]]; then
+      printf '[%s] Transferring part: index=%s file=%s dir=%s mode=%s\n' \
+        "${job_plan[job_name]}" "$display_index" "$gz_path" "${job_plan[transfer_dir]}" "${job_plan[transfer_mode]}"
+      artifact="$(_transfer_artifact "$gz_path" "${job_plan[transfer_dir]}" "${job_plan[transfer_mode]}" \
+        "${job_plan[transfer_overwrite]}" "${job_plan[transfer_rename]}" "${job_plan[job_name]}" \
+        "${EXPORT_DATE:-}" "$index" "${job_plan[file_split_index_width]}")" || return 1
+      printf '[%s] Transfer finished: src=%s dest=%s mode=%s\n' \
+        "${job_plan[job_name]}" "$gz_path" "$artifact" "${job_plan[transfer_mode]}"
+    else
+      artifact="$gz_path"
+    fi
+
+    artifact_paths+=("$artifact")
+  done < <(printf '%s\n' "$records")
+
+  job_plan[part_artifact_paths]="$(printf '%s\n' "${artifact_paths[@]}")"
+}

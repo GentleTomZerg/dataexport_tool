@@ -1,1 +1,5 @@
 script.*
+
+# demo / runtime artifacts
+tmp/
+script/etc/demo/pwd/*.pwd

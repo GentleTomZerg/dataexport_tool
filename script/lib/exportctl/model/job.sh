@@ -40,6 +40,69 @@ validate_split_config() {
   return 0
 }
 
+# Parse a byte size such as 512, 1K, 2M or 2G (1024 base) into bytes.
+# Prints the byte count on success; returns 1 when the size is malformed.
+parse_size_to_bytes() {
+  local raw="$1"
+  local number unit value
+
+  if [[ ! "$raw" =~ ^([0-9]+)([KkMmGg])?$ ]]; then
+    return 1
+  fi
+
+  number="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]^^}"
+  value=$((10#$number))
+
+  case "$unit" in
+    K) value=$((value * 1024)) ;;
+    M) value=$((value * 1024 * 1024)) ;;
+    G) value=$((value * 1024 * 1024 * 1024)) ;;
+  esac
+
+  printf '%s' "$value"
+}
+
+validate_file_split_config() {
+  local out_name="$1"
+  local -n _out="$out_name"
+  local job_name="${_out[name]}"
+  local compress_enabled compress_mode transfer_enabled max_bytes index_width
+
+  [[ "${_out[file_split_enabled],,}" == "true" ]] || return 0
+
+  if [[ "${_out[export_file]}" != *'${PART}'* ]]; then
+    printf 'ERROR: job %s FILE_SPLIT requires EXPORT_FILE to contain ${PART}\n' "$job_name" >&2
+    return 1
+  fi
+
+  compress_enabled="${_out[compress_enabled],,}"
+  compress_mode="${_out[compress_mode],,}"
+  if [[ "$compress_enabled" != "true" || "$compress_mode" != "gz" ]]; then
+    printf 'ERROR: job %s FILE_SPLIT requires COMPRESS.ENABLED=true and COMPRESS.MODE=gz\n' "$job_name" >&2
+    return 1
+  fi
+
+  transfer_enabled="${_out[transfer_enabled],,}"
+  if [[ "$transfer_enabled" == "true" && "${_out[transfer_rename]}" != *'${PART}'* ]]; then
+    printf 'ERROR: job %s FILE_SPLIT requires TRANSFER.RENAME to contain ${PART}\n' "$job_name" >&2
+    return 1
+  fi
+
+  if ! max_bytes="$(parse_size_to_bytes "${_out[file_split_max_size]}")" || [[ "$max_bytes" -le 0 ]]; then
+    printf 'ERROR: job %s FILE_SPLIT.MAX_SIZE is invalid: %s\n' "$job_name" "${_out[file_split_max_size]}" >&2
+    return 1
+  fi
+
+  index_width="${_out[file_split_index_width]}"
+  if [[ ! "$index_width" =~ ^[0-9]+$ || "$index_width" -le 0 ]]; then
+    printf 'ERROR: job %s FILE_SPLIT.INDEX_WIDTH is invalid: %s\n' "$job_name" "$index_width" >&2
+    return 1
+  fi
+
+  return 0
+}
+
 extract_job_fields() {
   local props_name="$1"
   local job_name="$2"
@@ -71,6 +134,9 @@ extract_job_fields() {
   _out[transfer_mode]="$(props_get "$props_name" "${prefix}TRANSFER.MODE")"
   _out[transfer_overwrite]="$(props_get "$props_name" "${prefix}TRANSFER.OVERWRITE")"
   _out[transfer_rename]="$(props_get "$props_name" "${prefix}TRANSFER.RENAME")"
+  _out[file_split_enabled]="$(props_get "$props_name" "${prefix}FILE_SPLIT.ENABLED")"
+  _out[file_split_max_size]="$(props_get "$props_name" "${prefix}FILE_SPLIT.MAX_SIZE")"
+  _out[file_split_index_width]="$(props_get "$props_name" "${prefix}FILE_SPLIT.INDEX_WIDTH")"
 }
 
 apply_job_defaults() {
@@ -87,6 +153,8 @@ apply_job_defaults() {
   _out[transfer_enabled]="${_out[transfer_enabled]:-false}"
   _out[transfer_mode]="${_out[transfer_mode]:-move}"
   _out[transfer_overwrite]="${_out[transfer_overwrite]:-false}"
+  _out[file_split_enabled]="${_out[file_split_enabled]:-false}"
+  _out[file_split_index_width]="${_out[file_split_index_width]:-2}"
   _out[splits]=""
 }
 
@@ -159,6 +227,7 @@ load_export_job() {
   extract_job_fields "$props_name" "$job_name" "$out_name"
   apply_job_defaults "$out_name"
   validate_required_fields "$out_name" "$job_name" || return 1
+  validate_file_split_config "$out_name" || return 1
 
   parse_job_splits "$props_name" "$job_name" "$out_name" "${_out[columns]}" || return 1
 }

@@ -13,6 +13,8 @@ cat >"$TMP_DIR/test.properties" <<'EOF'
 key1 = value1
 key2=${ENV_VAL}
 job.users.name=alice
+part_direct=${PART}
+part_mixed=${ENV_VAL}-${PART}-suffix
 EOF
 
 declare -A PROPS=()
@@ -21,6 +23,8 @@ assert_eq "value1" "${PROPS[key1]}" "raw value"
 ENV_VAL="from_env"
 export ENV_VAL
 assert_eq "from_env" "$(props_get PROPS key2)" "env expansion"
+assert_eq '${PART}' "$(props_get PROPS part_direct)" "PART token survives expansion"
+assert_eq 'from_env-${PART}-suffix' "$(props_get PROPS part_mixed)" "PART token survives while other tokens expand"
 mapfile -t keys < <(props_keys PROPS "job.")
 assert_eq "1" "${#keys[@]}" "job key count"
 

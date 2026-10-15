@@ -7,6 +7,7 @@ tests=(
   properties_test.sh
   selector_test.sh
   plan_test.sh
+  file_split_test.sh
   exportctl_test.sh
 )
 

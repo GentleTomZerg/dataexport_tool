@@ -36,6 +36,9 @@ build_export_plan() {
   _plan[transfer_mode]="${job[transfer_mode],,}"
   _plan[transfer_overwrite]="${job[transfer_overwrite],,}"
   _plan[transfer_rename]="${job[transfer_rename]}"
+  _plan[file_split_enabled]="${job[file_split_enabled],,}"
+  _plan[file_split_max_size]="${job[file_split_max_size]}"
+  _plan[file_split_index_width]="${job[file_split_index_width]}"
 
   if [[ -z "${_plan[export_file]}" ]]; then
     printf 'ERROR: job %s missing EXPORT_FILE\n' "$job_name" >&2

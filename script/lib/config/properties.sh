@@ -61,6 +61,12 @@ expand_value() {
   local -n _map="$map_name"
   local value="$raw"
   local token name resolved i
+  local part_token='${PART}'
+  local part_marker='__EXPORTCTL_PART__'
+
+  # ${PART} is a file-split template token rendered per part at artifact time;
+  # shield it so the remaining ${...} references can still be expanded.
+  value="${value//"$part_token"/$part_marker}"
 
   for i in {1..20}; do
     if [[ "$value" =~ (\$\{[A-Za-z_][A-Za-z0-9_.]*\}) ]]; then
@@ -79,6 +85,7 @@ expand_value() {
     fi
   done
 
+  value="${value//$part_marker/$part_token}"
   printf '%s' "$value"
 }
 

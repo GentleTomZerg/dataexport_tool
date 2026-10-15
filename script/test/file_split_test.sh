@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/test_helpers.sh"
 source "$ROOT_DIR/lib/config/properties.sh"
 source "$ROOT_DIR/lib/exportctl/model/plan.sh"
+source "$ROOT_DIR/lib/exportctl/run/artifact.sh"
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -154,5 +155,65 @@ write_props "$TMP_DIR/zero_width.properties" \
   'job.users.COMPRESS.ENABLED=true' \
   'job.users.COMPRESS.MODE=gz'
 expect_plan_error "zero index width" "$TMP_DIR/zero_width.properties" "INDEX_WIDTH"
+
+# --- ${PART} rendering ------------------------------------------------------
+
+expect_render_error() {
+  local label="$1"
+  local needle="$2"
+  shift 2
+  local err
+
+  if err="$("$@" 2>&1 >/dev/null)"; then
+    printf 'FAIL: %s: expected failure\n' "$label" >&2
+    exit 1
+  fi
+  assert_contains "$needle" "$err" "$label"
+}
+
+assert_eq "00" "$(format_part_index 0 2)" "index 0 pads to 00"
+assert_eq "05" "$(format_part_index 5 2)" "index 5 pads to 05"
+assert_eq "99" "$(format_part_index 99 2)" "index 99 pads to 99"
+assert_eq "005" "$(format_part_index 5 3)" "index width 3 pads to 005"
+
+expect_render_error "index 100 overflows width 2" "INDEX_WIDTH" format_part_index 100 2
+expect_render_error "width 0 is rejected" "INDEX_WIDTH" format_part_index 0 0
+
+assert_eq "00-users-2026-03-17.gz" \
+  "$(_render_artifact_name '${PART}-users-${EXPORT_DATE}.gz' users.csv users 2026-03-17 0 2)" \
+  "transfer template renders part 00"
+assert_eq "01-users-2026-03-17.gz" \
+  "$(_render_artifact_name '${PART}-users-${EXPORT_DATE}.gz' users.csv users 2026-03-17 1 2)" \
+  "transfer template renders part 01"
+assert_eq "99-users-2026-03-17.gz" \
+  "$(_render_artifact_name '${PART}-users-${EXPORT_DATE}.gz' users.csv users 2026-03-17 99 2)" \
+  "transfer template renders part 99"
+assert_eq "users-2026-03-17.csv" \
+  "$(_render_artifact_name 'users-${EXPORT_DATE}.csv' ./exports/users.csv users 2026-03-17)" \
+  "template without PART keeps existing behaviour"
+assert_eq '/tmp/exports/${PART}-users.csv' \
+  "$(_render_artifact_name '/tmp/exports/${PART}-users.csv' users.csv users 2026-03-17)" \
+  "PART is left literal when no part index is given"
+
+assert_eq "/tmp/exports/01-users-2026-03-17.csv" \
+  "$(render_export_part_name '/tmp/exports/${PART}-users-${EXPORT_DATE}.csv' 1 2 users 2026-03-17)" \
+  "export template renders the same PART placeholders as transfer"
+assert_eq "/tmp/exports/01-users-2026-03-17.csv" \
+  "$(render_export_part_name '/tmp/exports/${PART}-${JOB_NAME}-${EXPORT_DATE}.csv' 1 2 users 2026-03-17)" \
+  "export template renders JOB_NAME like transfer"
+expect_render_error "export render overflows width 2" "INDEX_WIDTH" \
+  render_export_part_name '/tmp/exports/${PART}-users.csv' 100 2 users 2026-03-17
+
+mkdir -p "$TMP_DIR/part_src" "$TMP_DIR/part_dest"
+printf 'id,name\n' >"$TMP_DIR/part_src/rows.csv"
+transferred="$(
+  _transfer_artifact "$TMP_DIR/part_src/rows.csv" "$TMP_DIR/part_dest" copy true \
+    '${PART}-users-${EXPORT_DATE}.csv' users 2026-03-17 3 2
+)"
+assert_eq "$TMP_DIR/part_dest/03-users-2026-03-17.csv" "$transferred" "transfer renders PART in the rename target"
+assert_true "[[ -f '$TMP_DIR/part_dest/03-users-2026-03-17.csv' ]]" "renamed part file exists"
+expect_render_error "transfer render overflows width 2" "INDEX_WIDTH" \
+  _transfer_artifact "$TMP_DIR/part_src/rows.csv" "$TMP_DIR/part_dest" copy true \
+  '${PART}-users.csv' users 2026-03-17 100 2
 
 echo "OK: file_split_test.sh"

@@ -1,17 +1,60 @@
 #!/usr/bin/env bash
 
+# Zero-pad a zero-based part index to INDEX_WIDTH digits.
+# Prints the padded index; errors when it needs more digits than INDEX_WIDTH allows.
+format_part_index() {
+  local index="$1"
+  local width="$2"
+  local formatted
+
+  if [[ ! "$index" =~ ^[0-9]+$ ]]; then
+    printf 'ERROR: invalid part index: %s\n' "$index" >&2
+    return 1
+  fi
+  if [[ ! "$width" =~ ^[0-9]+$ || "$width" -le 0 ]]; then
+    printf 'ERROR: invalid FILE_SPLIT.INDEX_WIDTH: %s\n' "$width" >&2
+    return 1
+  fi
+
+  printf -v formatted "%0${width}d" "$((10#$index))"
+  if [[ "${#formatted}" -gt "$width" ]]; then
+    printf 'ERROR: part index %s exceeds FILE_SPLIT.INDEX_WIDTH=%s; increase FILE_SPLIT.INDEX_WIDTH\n' \
+      "$index" "$width" >&2
+    return 1
+  fi
+
+  printf '%s' "$formatted"
+}
+
 _render_artifact_name() {
   local pattern="$1"
   local src="$2"
   local job_name="$3"
   local export_date="$4"
-  local base out
+  local part_index="${5:-}"
+  local index_width="${6:-2}"
+  local base out part
   base="${src##*/}"
   out="$pattern"
   out="${out//\$\{JOB_NAME\}/$job_name}"
   out="${out//\$\{EXPORT_DATE\}/$export_date}"
   out="${out//\$\{BASENAME\}/$base}"
+  if [[ -n "$part_index" ]]; then
+    part="$(format_part_index "$part_index" "$index_width")" || return 1
+    out="${out//\$\{PART\}/$part}"
+  fi
   printf '%s' "$out"
+}
+
+# Render a job's EXPORT_FILE template for one zero-based part index.
+render_export_part_name() {
+  local template="$1"
+  local part_index="$2"
+  local index_width="$3"
+  local job_name="$4"
+  local export_date="${5:-}"
+
+  _render_artifact_name "$template" "" "$job_name" "$export_date" "$part_index" "$index_width"
 }
 
 _compress_artifact() {
@@ -51,11 +94,15 @@ _transfer_artifact() {
   local rename_pattern="$5"
   local job_name="$6"
   local export_date="$7"
+  local part_index="${8:-}"
+  local index_width="${9:-2}"
   local target_name target_path
 
   mkdir -p "$dest_dir" || return 1
   if [[ -n "$rename_pattern" ]]; then
-    target_name="$(_render_artifact_name "$rename_pattern" "$src" "$job_name" "$export_date")"
+    target_name="$(
+      _render_artifact_name "$rename_pattern" "$src" "$job_name" "$export_date" "$part_index" "$index_width"
+    )" || return 1
   else
     target_name="${src##*/}"
   fi

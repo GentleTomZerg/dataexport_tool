@@ -15,7 +15,7 @@ Status: confirmed
 ## 术语（见 `GLOSSARY.md`）
 
 - **field separator / line terminator**：结构字符，由配置决定，用于分隔字段与行。
-- **data escaping**：字段数据内部的字节表示法；转义后数据里不存在裸的 tab / LF / CR。
+- **data escaping**：字段数据内部的字节表示法；转义后数据里不存在裸的 tab / LF。
 
 ## 契约
 
@@ -30,7 +30,7 @@ Status: confirmed
 
 由此得到不变量：**一行 = 一条记录，且每条记录的字段数恒等于 `COLUMNS` 展开后的列数**，与数据内容无关。
 
-CR（0x0D）**不在**契约内：`mysql --batch` 无论是否带 `--raw` 都把它原样写出（客户端源码 `tee_write` 只处理 `\t` / `\n` / `\\`，尽管 `MY_PRINT_CTRL` 的注释声称包含 CR）。CR 既不冒充字段分隔符也不冒充行终止符，因此原样透传；`postgres` 的 `COPY ... FORMAT text` 则输出 `\r`。两个分支在这一点上不一致，属于已知限制。
+CR（0x0D）**不在**契约内：`mysql --batch` 无论是否带 `--raw` 都把它原样写出。客户端源码里 `safe_put_field` 打开 `MY_PRINT_ESC_0 | MY_PRINT_CTRL` 两个标志，`tee_write` 的 `MY_PRINT_ESC_0` 分支处理 NUL → `\0`，`MY_PRINT_CTRL` 分支只处理 `\t` / `\n` / `\\`，没有 CR 分支（尽管 `MY_PRINT_CTRL` 的注释声称包含 CR）。CR 既不冒充字段分隔符也不冒充行终止符，因此原样透传；`postgres` 的 `COPY ... FORMAT text` 则输出 `\r`。两个分支在这一点上不一致，属于已知限制。
 
 ## 消费方义务
 

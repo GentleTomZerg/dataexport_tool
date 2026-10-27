@@ -28,7 +28,7 @@ bash script/test/escaping_test.sh
 ### Shell Script Conventions
 
 - **Shebang**: Use `#!/usr/bin/env bash` for all scripts
-- **Shell Options**: Use `set -uo pipefail` and `shopt -s extglob` (see `lib/common/strict.sh`)
+- **Shell Options**: Use `set -uo pipefail` and `shopt -s extglob` (see `lib/common/strict.sh`); test files add `-e` (`set -euo pipefail`) so a failing assertion stops the run
 - **Path Resolution**: Use `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)` for script-relative paths
 - **Local Variables**: Always use `local` for function variables
 - **References**: Use `local -n` for passing associative arrays by reference

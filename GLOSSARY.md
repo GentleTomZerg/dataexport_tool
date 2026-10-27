@@ -41,7 +41,7 @@ The character sequence that ends a record in an export file; configured per job 
 _Avoid_: newline, row delimiter, EOL
 
 **Data escaping**:
-The rule that a field's own data never contains a raw tab or LF: those bytes appear as the two-character sequences `\t` and `\n`, and a backslash appears as `\\`. It keeps one row on one line with a fixed field count, whatever the data. Consumers must unescape before use.
+The rule that a field's own data never contains a raw tab or LF: those bytes appear as the two-character sequences `\t` and `\n`, a backslash appears as `\\`, and NUL appears as `\0`. It keeps one row on one line with a fixed field count, whatever the data. Consumers must unescape before use.
 _Avoid_: quoting, sanitizing, encoding
 
 **Runtime variables**:

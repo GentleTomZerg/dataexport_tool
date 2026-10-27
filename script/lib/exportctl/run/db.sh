@@ -2,6 +2,11 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/credentials.sh"
 
+# Field data escaping (ADR-0002, docs/adr/0002-field-data-is-escaped.md):
+# mysql --batch escapes NUL, tab, LF and backslash, so those bytes in a value can
+# never impersonate a field separator or the line terminator. That is why --raw
+# must not be passed to the client. CR is the one byte it still writes raw; that
+# is a known limitation, so it is passed through untouched rather than guessed at.
 _sanitize_fields() {
   local replacement="$1"
   awk -v FS='\t' -v OFS='\t' -v REPLACEMENT="$replacement" '
@@ -47,7 +52,7 @@ execute_plan_export() {
 
   case "${_plan[db_type]}" in
   mysql)
-    MYSQL_PWD="$password" mysql --batch --raw --skip-column-names \
+    MYSQL_PWD="$password" mysql --batch --skip-column-names \
       -h "${_plan[db_host]}" \
       -P "${_plan[db_port]}" \
       -u "${_plan[db_user]}" \

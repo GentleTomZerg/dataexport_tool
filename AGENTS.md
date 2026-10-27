@@ -15,6 +15,7 @@ bash script/test/properties_test.sh
 bash script/test/selector_test.sh
 bash script/test/plan_test.sh
 bash script/test/exportctl_test.sh
+bash script/test/escaping_test.sh
 ```
 
 ### Package for Deployment

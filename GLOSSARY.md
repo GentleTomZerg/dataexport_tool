@@ -32,6 +32,18 @@ _Avoid_: file split
 One substring column produced by a column split.
 _Avoid_: part, piece
 
+**Field separator**:
+The character sequence that separates one field from the next in an export file; configured per job (`FIELD_SEPARATOR`), `\t` by default.
+_Avoid_: delimiter, field terminator, column separator
+
+**Line terminator**:
+The character sequence that ends a record in an export file; configured per job (`LINE_TERMINATOR`), `\n` by default.
+_Avoid_: newline, row delimiter, EOL
+
+**Data escaping**:
+The rule that a field's own data never contains a raw tab or LF: those bytes appear as the two-character sequences `\t` and `\n`, and a backslash appears as `\\`. It keeps one row on one line with a fixed field count, whatever the data. Consumers must unescape before use.
+_Avoid_: quoting, sanitizing, encoding
+
 **Runtime variables**:
 Date-derived values (e.g. `EXPORT_DATE`, `YESTERDAY`) available when a job's configuration is expanded.
 _Avoid_: parameters, args

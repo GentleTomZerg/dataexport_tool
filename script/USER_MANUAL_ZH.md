@@ -199,7 +199,7 @@ job.events_split.TRANSFER.RENAME=${PART}-LENS-${job.events_split.TABLE_NAME}-${E
 |-----|-------|------|
 | `job.<name>.WHERE` | 空 | SQL 条件，原样拼入 |
 | `job.<name>.FIELD_SEPARATOR` | `\t` | 字段分隔符 |
-| `job.<name>.FIELD_SEPARATOR_DATA_REPLACEMENT` | `\|?` | 将字段数据中的 `\|!` 替换为该值（防止与分隔符冲突） |
+| `job.<name>.FIELD_SEPARATOR_DATA_REPLACEMENT` | `\|?` | 将（已转义的）字段数据中的 `\|!` 替换为该值（防止与分隔符冲突） |
 | `job.<name>.LINE_TERMINATOR` | `\n` | 行终止符 |
 | `job.<name>.COMPRESS.ENABLED` | `false` | 是否启用压缩 |
 | `job.<name>.COMPRESS.MODE` | `tar.gz` | 压缩格式：`gz`, `tar`, `tar.gz`, `tgz` |
@@ -216,7 +216,7 @@ job.events_split.TRANSFER.RENAME=${PART}-LENS-${job.events_split.TABLE_NAME}-${E
 | `job.<name>.FILE_SPLIT.INDEX_WIDTH` | `2` | 序号位数，零填充，从 `00` 起自增 |
 
 `job.<name>.FIELD_SEPARATOR_DATA_REPLACEMENT` 为非必填项，未配置时默认值为 `|?`。
-该配置仅影响字段数据中的 `|!` 替换，不影响 `FIELD_SEPARATOR` 与 `LINE_TERMINATOR` 本身配置。
+该配置仅影响字段数据中的 `|!` 替换，不影响 `FIELD_SEPARATOR` 与 `LINE_TERMINATOR` 本身配置；它作用在**已经过转义**的字段文本上（见 [6.5 字段数据转义](#65-字段数据转义)）。
 
 ### 6.3 列拆分说明
 
@@ -278,6 +278,29 @@ SELECT id,name,SUBSTRING(blog, 1, 10000) AS blog_part1,
 **传输与统计**
 
 每个 part 各自走该 job 的 `TRANSFER.*` 配置，`RENAME` 中的 `${PART}` 逐个渲染。行数统计与不拆分时完全一致；日志区分 `bytes_csv`（未压缩，与今天同义）与 `bytes_gz`（各 part gz 之和），并逐 part 打印、汇总。
+
+### 6.5 字段数据转义
+
+表里的数据可能含有制表符、换行符。这两个字节**永远不会**作为裸字节写进导出文件，否则它们会冒充 `FIELD_SEPARATOR` 或 `LINE_TERMINATOR`：数据里的 tab 会让一行凭空多一列，数据里的换行符会把一行切成两行（同时污染 `FILE_SPLIT` 的切点与 `lines=` 统计）。
+
+字段数据内的这些字符一律以**两个字符**的序列出现：
+
+| 数据中的字符 | 导出文件中的字节 |
+|---|---|
+| tab (0x09) | `\t` |
+| 换行 LF (0x0A) | `\n` |
+| 反斜杠 `\` (0x5C) | `\\` |
+| NUL (0x00) | `\0` |
+
+由此得到不变量：**一行 = 一条记录，且每条记录的字段数恒等于 `COLUMNS`（经 `SPLIT` 展开后）的列数**，与数据内容无关。
+
+转义由数据库客户端完成：`mysql` 必须按 `--batch` 调用（不带 `--raw`），客户端即转义 NUL / tab / LF / 反斜杠；`\copy ... FORMAT text` 本就满足上述契约。这是全局行为，**没有开关、不能逐 job 关闭**。
+
+**已知限制（CR）**：`mysql --batch` 会把回车符（0x0D）原样写出，不转义（客户端源码只处理 `\t` / `\n` / `\\`）。CR 既不冒充字段分隔符也不冒充行终止符，所以不影响行与字段的结构，会原样透传；`postgres` 分支则输出 `\r`。两者在这一点上不一致。
+
+**消费方义务**：读取导出文件时必须反转义才能拿到原值，且必须**先处理 `\\`、再处理 `\t` / `\n`（postgres 还有 `\r`）**。仅仅“不再按 tab 切分”是不够的：数据里如果一个反斜杠，导出后是 `\\`，不反转义就会多出一个反斜杠；数据里如果是字面的两个字符 `\t`，导出后是 `\\t`，反转义后才回到 `\t`。
+
+**已知限制（NULL）**：字段文本恰好是 `NULL` 时会被置为空，与真正的 NULL 无法区分（`mysql` batch 模式两者输出相同）；postgres 的真 NULL 输出为 `\N`。详见工单 `.scratch/field-data-escaping/issues/04-null-ambiguity.md`。
 
 ## 7. 输出示例
 

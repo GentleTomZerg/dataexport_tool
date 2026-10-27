@@ -19,7 +19,40 @@ echo -n "testpassword" | openssl des3 -salt -in /dev/stdin -out "$TMP_DIR/pwd/lo
 cat >"$TMP_DIR/bin/mysql" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '1\tAlice|!A|!\n2\tNULL\n'
+# Fake client. Default output is the classic two-row case. With FAKE_MYSQL_TSV_FILE
+# it models what the real client does, so the tests fail if --raw comes back:
+#   --batch: tab/LF/backslash/NUL escaped, but CR left raw
+#   --raw:   nothing escaped, so data tab/LF bytes reach the pipeline raw
+raw=0
+for arg in "$@"; do
+  [[ "$arg" == "--raw" || "$arg" == "-r" ]] && raw=1
+done
+if [[ -z "${FAKE_MYSQL_TSV_FILE:-}" ]]; then
+  printf '1\tAlice|!A|!\n2\tNULL\n'
+  exit 0
+fi
+awk -v raw="$raw" '
+  function unescape(s,   out, i, n, c, nx, bs) {
+    bs = sprintf("%c", 92)
+    out = ""; n = length(s)
+    for (i = 1; i <= n; i++) {
+      c = substr(s, i, 1)
+      if (c != bs) { out = out c; continue }
+      nx = substr(s, i + 1, 1)
+      if (nx == "r") { out = out sprintf("%c", 13); i++ }
+      else if (nx == "t") { out = out (raw ? sprintf("%c", 9) : bs "t"); i++ }
+      else if (nx == "n") { out = out (raw ? sprintf("%c", 10) : bs "n"); i++ }
+      else if (nx == bs) { out = out (raw ? bs : bs bs); i++ }
+      else out = out c
+    }
+    return out
+  }
+  {
+    for (i = 1; i <= NF; i++) $i = unescape($i)
+    $1 = $1
+    print
+  }
+' FS='\t' OFS='\t' "$FAKE_MYSQL_TSV_FILE"
 EOF
 chmod +x "$TMP_DIR/bin/mysql"
 
@@ -120,6 +153,33 @@ assert_contains "[default] Completed successfully." "$default_run_output" "defau
 assert_true "[[ -f '$PROJECT_DIR/exports/default_2026-03-17.csv' ]]" "default export file created"
 default_content="$(cat "$PROJECT_DIR/exports/default_2026-03-17.csv")"
 assert_contains $'1\tAlice|?A|?\n2\t' "$default_content" "uses |? default replacement when key is absent"
+rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
+
+###############################################################################
+# Escaping end to end: data characters never become structure
+# (docs/adr/0002-field-data-is-escaped.md)
+###############################################################################
+
+# Fixture in the client's escaped form: a value holding a tab, a LF, a separator
+# collision and a doubled backslash; then a NULL row and a plain row. The fake
+# client decides whether those escapes are emitted as bytes.
+printf '1\tA\\tB\\nC|!E\\\\F\n2\tNULL\n3\tplain\n' >"$TMP_DIR/escaped.tsv"
+FAKE_MYSQL_TSV_FILE="$TMP_DIR/escaped.tsv" PATH="$TMP_DIR/bin:$PATH" \
+  "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/jobs.properties" \
+  --env-config "$TMP_DIR/env.properties" --date 2026-03-17 default 2>&1 \
+  >"$TMP_DIR/escaped_run.log"
+assert_contains "[default] Export finished: file=./exports/default_2026-03-17.csv lines=3" \
+  "$(cat "$TMP_DIR/escaped_run.log")" "escaping export keeps three rows"
+assert_contains "[default] Completed successfully." \
+  "$(cat "$TMP_DIR/escaped_run.log")" "escaping export succeeds"
+
+escaped_file="$PROJECT_DIR/exports/default_2026-03-17.csv"
+escaped_content="$(cat "$escaped_file"; printf 'sentinel')"
+assert_eq $'1\tA\\tB\\nC|?E\\\\F\n2\t\n3\tplain\nsentinel' "$escaped_content" \
+  "data escapes survive to the artifact and NULL is blanked"
+assert_eq '2 2 2 ' "$(awk -F'\t' '{ printf "%d ", NF }' "$escaped_file")" \
+  "every exported row keeps its field count"
+assert_eq "3" "$(awk 'END { print NR + 0 }' "$escaped_file")" "artifact has three lines"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 ###############################################################################

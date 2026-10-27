@@ -31,3 +31,23 @@ assert_true() {
     exit 1
   fi
 }
+
+# Assert the exact bytes of a file. The trailing sentinel keeps command
+# substitution from swallowing a final newline.
+assert_file_eq() {
+  local file="$1"
+  local expected="$2"
+  local msg="$3"
+  local actual
+  actual="$(cat "$file"; printf 'sentinel')"
+  assert_eq "${expected}sentinel" "$actual" "$msg"
+}
+
+# Assert the per-line field counts of a tab-delimited file as a space-separated
+# sequence, e.g. "2 2 2 " for three well-formed rows.
+assert_field_counts() {
+  local file="$1"
+  local expected="$2"
+  local msg="$3"
+  assert_eq "$expected" "$(awk -F'\t' '{ printf "%d ", NF }' "$file")" "$msg"
+}

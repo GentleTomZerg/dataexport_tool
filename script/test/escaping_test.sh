@@ -32,23 +32,6 @@ transform_to_file() {
     _apply_separators "$field_sep" "$line_term" >"$OUT_FILE"
 }
 
-# Assert the bytes of OUT_FILE. The trailing sentinel keeps command substitution
-# from swallowing a final newline.
-assert_output_eq() {
-  local expected="$1"
-  local msg="$2"
-  local actual
-  actual="$(cat "$OUT_FILE"; printf 'sentinel')"
-  assert_eq "${expected}sentinel" "$actual" "$msg"
-}
-
-assert_every_line_has_fields() {
-  local expected="$1"
-  local msg="$2"
-  local actual
-  actual="$(awk -F'\t' '{ printf "%d ", NF }' "$OUT_FILE")"
-  assert_eq "$expected" "$actual" "$msg"
-}
 
 ###############################################################################
 # A tab in data is the two bytes \ t -- never a field separator
@@ -56,41 +39,41 @@ assert_every_line_has_fields() {
 
 # `\t` as produced by mysql --batch for a tab in a value.
 transform_to_file $'1\tA\\tB\n'
-assert_output_eq $'1\tA\\tB\n' "data tab survives as the two bytes backslash-t"
+assert_file_eq "$OUT_FILE" $'1\tA\\tB\n' "data tab survives as the two bytes backslash-t"
 
 transform_to_file $'1\tA\\tB\n' '|!' '@#$\n'
-assert_output_eq $'1|!A\\tB@#$\n' "data tab survives under custom separators"
+assert_file_eq "$OUT_FILE" $'1|!A\\tB@#$\n' "data tab survives under custom separators"
 
 # A tab in data must not grow the field count: two fields in, two fields out.
 transform_to_file $'1\tA\\tB\n'
-assert_every_line_has_fields '2 ' 'data tab does not add a field'
+assert_field_counts "$OUT_FILE" '2 ' 'data tab does not add a field'
 
 transform_to_file $'1\tA\\tB\\tC\n'
-assert_every_line_has_fields '2 ' 'several data tabs do not add fields'
+assert_field_counts "$OUT_FILE" '2 ' 'several data tabs do not add fields'
 
 ###############################################################################
 # The rest of the escaped set passes through untouched
 ###############################################################################
 
 transform_to_file $'1\tA\\nB\n'
-assert_output_eq $'1\tA\\nB\n' "data newline stays the two bytes backslash-n"
+assert_file_eq "$OUT_FILE" $'1\tA\\nB\n' "data newline stays the two bytes backslash-n"
 
 transform_to_file $'1\tA\\rB\n'
-assert_output_eq $'1\tA\\rB\n' "already escaped CR stays as two bytes"
+assert_file_eq "$OUT_FILE" $'1\tA\\rB\n' "already escaped CR stays as two bytes"
 
 transform_to_file $'1\tA\\0B\n'
-assert_output_eq $'1\tA\\0B\n' "escaped NUL stays as two bytes"
+assert_file_eq "$OUT_FILE" $'1\tA\\0B\n' "escaped NUL stays as two bytes"
 
 # A backslash in data reaches this stage already doubled by the client, and must
 # not be doubled again.
 transform_to_file $'1\tA\\\\B\n'
-assert_output_eq $'1\tA\\\\B\n' "doubled backslash is not escaped twice"
+assert_file_eq "$OUT_FILE" $'1\tA\\\\B\n' "doubled backslash is not escaped twice"
 
 # Data that literally contains the two characters \ t reaches this stage as
 # \\t (client-doubled) and must stay that way, so that unescaping \ -> \ and
 # \t -> tab round-trips.
 transform_to_file $'1\tA\\\\tB\n'
-assert_output_eq $'1\tA\\\\tB\n' "literal backslash-t in data is preserved for unescaping"
+assert_file_eq "$OUT_FILE" $'1\tA\\\\tB\n' "literal backslash-t in data is preserved for unescaping"
 
 ###############################################################################
 # Known limitation: mysql --batch writes CR raw, so a raw CR is passed through
@@ -99,10 +82,10 @@ assert_output_eq $'1\tA\\\\tB\n' "literal backslash-t in data is preserved for u
 ###############################################################################
 
 transform_to_file $'1\tA\rB\n'
-assert_output_eq $'1\tA\rB\n' "raw CR is passed through unchanged (known limitation)"
+assert_file_eq "$OUT_FILE" $'1\tA\rB\n' "raw CR is passed through unchanged (known limitation)"
 
 transform_to_file $'1\tA\r\n'
-assert_every_line_has_fields '2 ' 'raw CR does not add a field'
+assert_field_counts "$OUT_FILE" '2 ' 'raw CR does not add a field'
 assert_eq "1" "$(awk 'END { print NR + 0 }' "$OUT_FILE")" 'raw CR does not split the row'
 
 ###############################################################################
@@ -110,35 +93,35 @@ assert_eq "1" "$(awk 'END { print NR + 0 }' "$OUT_FILE")" 'raw CR does not split
 ###############################################################################
 
 transform_to_file $'1\tAlice|!A|!\n'
-assert_output_eq $'1\tAlice|?A|?\n' "separator collision is replaced with the default |?"
+assert_file_eq "$OUT_FILE" $'1\tAlice|?A|?\n' "separator collision is replaced with the default |?"
 
 transform_to_file $'1\tAlice|!A|!\n' '\t' '\n' '|X'
-assert_output_eq $'1\tAlice|XA|X\n' "separator collision uses the configured replacement"
+assert_file_eq "$OUT_FILE" $'1\tAlice|XA|X\n' "separator collision uses the configured replacement"
 
 transform_to_file $'1\tNULL\n'
-assert_output_eq $'1\t\n' "NULL becomes an empty field"
+assert_file_eq "$OUT_FILE" $'1\t\n' "NULL becomes an empty field"
 
 transform_to_file $'1\t\\N\n'
-assert_output_eq $'1\t\\N\n' "postgres NULL marker \\N is not treated as NULL"
+assert_file_eq "$OUT_FILE" $'1\t\\N\n' "postgres NULL marker \\N is not treated as NULL"
 
 transform_to_file $'1\t2\t\n'
-assert_output_eq $'1\t2\t\n' "a trailing empty field is preserved"
+assert_file_eq "$OUT_FILE" $'1\t2\t\n' "a trailing empty field is preserved"
 
 ###############################################################################
 # Combinations: one field carrying every hazard at once
 ###############################################################################
 
 transform_to_file $'1\tA\\tB\rC\\nD|!E\\\\F\n'
-assert_output_eq $'1\tA\\tB\rC\\nD|?E\\\\F\n' "all hazards in one field are handled independently"
-assert_every_line_has_fields '2 ' "all hazards in one field keep the field count"
+assert_file_eq "$OUT_FILE" $'1\tA\\tB\rC\\nD|?E\\\\F\n' "all hazards in one field are handled independently"
+assert_field_counts "$OUT_FILE" '2 ' "all hazards in one field keep the field count"
 
 ###############################################################################
 # Row structure survives: one row in, one line out
 ###############################################################################
 
 transform_to_file $'1\tA\\tB\n2\tC\rD\n3\tE|!F\n'
-assert_output_eq $'1\tA\\tB\n2\tC\rD\n3\tE|?F\n' "three rows each stay one line"
-assert_every_line_has_fields '2 2 2 ' "three rows each keep two fields"
+assert_file_eq "$OUT_FILE" $'1\tA\\tB\n2\tC\rD\n3\tE|?F\n' "three rows each stay one line"
+assert_field_counts "$OUT_FILE" '2 2 2 ' "three rows each keep two fields"
 
 line_count="$(awk 'END { print NR + 0 }' "$OUT_FILE")"
 assert_eq "3" "$line_count" "row count is preserved"

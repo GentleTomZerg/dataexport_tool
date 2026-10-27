@@ -21,8 +21,11 @@ cat >"$TMP_DIR/bin/mysql" <<'EOF'
 set -euo pipefail
 # Fake client. Default output is the classic two-row case. With FAKE_MYSQL_TSV_FILE
 # it models what the real client does, so the tests fail if --raw comes back:
-#   --batch: tab/LF/backslash/NUL escaped, but CR left raw
+#   --batch: NUL/tab/LF/backslash escaped, but CR left raw
 #   --raw:   nothing escaped, so data tab/LF bytes reach the pipeline raw
+# In the fixture a data CR is written \r and a data NUL as \0; the client emits
+# the CR as a raw byte in either mode, and NUL as \0 in either mode (raw-mode NUL
+# is not modelled: awk cannot carry a NUL byte).
 raw=0
 for arg in "$@"; do
   [[ "$arg" == "--raw" || "$arg" == "-r" ]] && raw=1
@@ -32,6 +35,7 @@ if [[ -z "${FAKE_MYSQL_TSV_FILE:-}" ]]; then
   exit 0
 fi
 awk -v raw="$raw" '
+  # Byte codes, spelled out: 92 = backslash, 13 = CR, 9 = tab, 10 = LF.
   function unescape(s,   out, i, n, c, nx, bs) {
     bs = sprintf("%c", 92)
     out = ""; n = length(s)
@@ -163,7 +167,7 @@ rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 # Fixture in the client's escaped form: a value holding a tab, a LF, a separator
 # collision and a doubled backslash; then a NULL row and a plain row. The fake
 # client decides whether those escapes are emitted as bytes.
-printf '1\tA\\tB\\nC|!E\\\\F\n2\tNULL\n3\tplain\n' >"$TMP_DIR/escaped.tsv"
+printf '1\tA\\tB\\nC|!E\\\\F\\0N\n2\tNULL\n3\tplain\n' >"$TMP_DIR/escaped.tsv"
 FAKE_MYSQL_TSV_FILE="$TMP_DIR/escaped.tsv" PATH="$TMP_DIR/bin:$PATH" \
   "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/jobs.properties" \
   --env-config "$TMP_DIR/env.properties" --date 2026-03-17 default 2>&1 \
@@ -174,11 +178,9 @@ assert_contains "[default] Completed successfully." \
   "$(cat "$TMP_DIR/escaped_run.log")" "escaping export succeeds"
 
 escaped_file="$PROJECT_DIR/exports/default_2026-03-17.csv"
-escaped_content="$(cat "$escaped_file"; printf 'sentinel')"
-assert_eq $'1\tA\\tB\\nC|?E\\\\F\n2\t\n3\tplain\nsentinel' "$escaped_content" \
+assert_file_eq "$escaped_file" $'1\tA\\tB\\nC|?E\\\\F\\0N\n2\t\n3\tplain\n' \
   "data escapes survive to the artifact and NULL is blanked"
-assert_eq '2 2 2 ' "$(awk -F'\t' '{ printf "%d ", NF }' "$escaped_file")" \
-  "every exported row keeps its field count"
+assert_field_counts "$escaped_file" '2 2 2 ' "every exported row keeps its field count"
 assert_eq "3" "$(awk 'END { print NR + 0 }' "$escaped_file")" "artifact has three lines"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 

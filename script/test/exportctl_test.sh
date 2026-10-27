@@ -103,6 +103,19 @@ job.default.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
 job.default.TABLE_NAME=users
 job.default.COLUMNS=id,name
 job.default.EXPORT_FILE=${ENV_EXPORT_ROOT}/default_${EXPORT_DATE}.csv
+job.pipes.DB_TYPE=${ENV_TEST_DB_TYPE}
+job.pipes.DB_HOST=${ENV_TEST_DB_HOST}
+job.pipes.DB_PORT=${ENV_TEST_DB_PORT}
+job.pipes.DB_NAME=${ENV_TEST_DB_NAME}
+job.pipes.DB_USER=${ENV_TEST_DB_USER}
+job.pipes.DB_PASSWORD_FILE=${ENV_TEST_DB_PASSWORD_FILE}
+job.pipes.DB_PASSWORD_KEY_FILE=${ENV_TEST_DB_PASSWORD_KEY_FILE}
+job.pipes.TABLE_NAME=users
+job.pipes.COLUMNS=id,name
+job.pipes.EXPORT_FILE=${ENV_EXPORT_ROOT}/pipes_${EXPORT_DATE}.csv
+job.pipes.FIELD_SEPARATOR=|!
+job.pipes.LINE_TERMINATOR=@#$\n
+job.pipes.FIELD_SEPARATOR_DATA_REPLACEMENT=|?
 job.bad.DB_TYPE=mysql
 job.bad.DB_HOST=localhost
 job.bad.DB_PORT=3306
@@ -119,7 +132,7 @@ plan_output="$(PATH="$TMP_DIR/bin:$PATH" "$ROOT_DIR/bin/exportctl.sh" plan --job
 assert_contains "== Job: users ==" "$plan_output" "plan includes users"
 assert_contains "== Job: bad ==" "$plan_output" "failed job header printed"
 assert_contains "[bad] Plan build failed." "$plan_output" "bad job logged"
-assert_contains "Summary: total=3 ok=2 failed=1" "$plan_output" "summary counts"
+assert_contains "Summary: total=4 ok=3 failed=1" "$plan_output" "summary counts"
 assert_contains "== Environment ==" "$plan_output" "environment block printed"
 assert_contains "ENV_EXPORT_ROOT=./exports" "$plan_output" "export env printed"
 assert_contains "SQL=SELECT id,name FROM users WHERE status = 'active'" "$plan_output" "plan prints sql"
@@ -182,6 +195,31 @@ assert_file_eq "$escaped_file" $'1\tA\\tB\\nC|?E\\\\F\\0N\n2\t\n3\tplain\n' \
   "data escapes survive to the artifact and NULL is blanked"
 assert_field_counts "$escaped_file" '2 2 2 ' "every exported row keeps its field count"
 assert_eq "3" "$(awk 'END { print NR + 0 }' "$escaped_file")" "artifact has three lines"
+rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
+
+###############################################################################
+# Escaping under the production separators (|! and @#$ + LF): a data tab or LF
+# must never touch the field separator or the line terminator
+###############################################################################
+
+printf '1\tA\\tB\\nC\\\\D|!E\n2\tNULL\n3\tplain\n' >"$TMP_DIR/pipes.tsv"
+FAKE_MYSQL_TSV_FILE="$TMP_DIR/pipes.tsv" PATH="$TMP_DIR/bin:$PATH" \
+  "$ROOT_DIR/bin/exportctl.sh" run --jobs-config "$TMP_DIR/jobs.properties" \
+  --env-config "$TMP_DIR/env.properties" --date 2026-03-17 pipes 2>&1 \
+  >"$TMP_DIR/pipes_run.log"
+assert_contains "[pipes] Export finished: file=./exports/pipes_2026-03-17.csv lines=3" \
+  "$(cat "$TMP_DIR/pipes_run.log")" "pipes export keeps three rows"
+
+pipes_file="$PROJECT_DIR/exports/pipes_2026-03-17.csv"
+# data tab -> \t, data LF -> \n, data backslash -> \\, data |! -> |?
+assert_file_eq "$pipes_file" $'1|!A\\tB\\nC\\\\D|?E@#$\n2|!@#$\n3|!plain@#$\n' \
+  "data escapes never reach the field separator or the line terminator"
+assert_field_counts "$pipes_file" '2 2 2 ' \
+  "every row keeps two fields under the |! separator" '\\|!'
+assert_eq "3" "$(grep -o '@#[$]' "$pipes_file" | wc -l | tr -d ' ')" \
+  "exactly one @#\$ terminator per row"
+assert_eq "3" "$(awk 'END { print NR + 0 }' "$pipes_file")" \
+  "data tabs and LFs do not add lines"
 rm -rf "$PROJECT_DIR/exports" "$PROJECT_DIR/exports_transfer"
 
 ###############################################################################

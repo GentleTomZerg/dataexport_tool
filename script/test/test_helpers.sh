@@ -43,11 +43,13 @@ assert_file_eq() {
   assert_eq "${expected}sentinel" "$actual" "$msg"
 }
 
-# Assert the per-line field counts of a tab-delimited file as a space-separated
-# sequence, e.g. "2 2 2 " for three well-formed rows.
+# Assert the per-line field counts of a delimited file as a space-separated
+# sequence, e.g. "2 2 2 " for three well-formed rows. The optional fourth
+# argument is the awk field separator regex; it defaults to a real tab.
 assert_field_counts() {
   local file="$1"
   local expected="$2"
   local msg="$3"
-  assert_eq "$expected" "$(awk -F'\t' '{ printf "%d ", NF }' "$file")" "$msg"
+  local fs="${4:-\t}"
+  assert_eq "$expected" "$(awk -F"$fs" '{ printf "%d ", NF }' "$file")" "$msg"
 }
